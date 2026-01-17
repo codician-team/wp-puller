@@ -45,6 +45,7 @@ Or manually upload the `wp-puller` folder to `/wp-content/plugins/`.
 3. Select branch (usually `main`)
 4. If your theme is in a subdirectory, enter the path (e.g., `theme/starter-theme`)
 5. Click **Test Connection**, then **Save Settings**
+6. Refreshing the page might be needed if you do not see the **Connected** indicator.
 
 ### Set Up Webhook (for auto-updates)
 
