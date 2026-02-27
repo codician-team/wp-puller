@@ -271,6 +271,30 @@
     flex: 1;
 }
 
+.wp-puller-branch-group {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.wp-puller-branch-group select {
+    flex: 1;
+    max-width: 400px;
+}
+
+.wp-puller-branch-group .button {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    white-space: nowrap;
+}
+
+.wp-puller-branch-group .button .dashicons {
+    font-size: 16px;
+    width: 16px;
+    height: 16px;
+}
+
 .wp-puller-field-actions {
     margin-top: 20px;
     padding-top: 16px;
@@ -597,6 +621,15 @@
 
     .wp-puller-input-group {
         flex-direction: column;
+    }
+
+    .wp-puller-branch-group {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .wp-puller-branch-group select {
+        max-width: none;
     }
 
     .wp-puller-backup-item {

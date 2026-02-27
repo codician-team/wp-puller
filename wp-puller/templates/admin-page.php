@@ -109,13 +109,18 @@ $pat_status   = WP_Puller_Admin::get_pat_status();
 
                     <div class="wp-puller-field">
                         <label for="wp-puller-branch"><?php esc_html_e( 'Branch', 'wp-puller' ); ?></label>
-                        <input type="text"
-                               id="wp-puller-branch"
-                               name="branch"
-                               value="<?php echo esc_attr( $status['branch'] ); ?>"
-                               placeholder="main"
-                               class="regular-text">
-                        <p class="description"><?php esc_html_e( 'Branch to track for updates (e.g., main, master, production).', 'wp-puller' ); ?></p>
+                        <div class="wp-puller-branch-group">
+                            <select id="wp-puller-branch" name="branch" class="regular-text">
+                                <option value="<?php echo esc_attr( $status['branch'] ); ?>" selected>
+                                    <?php echo esc_html( $status['branch'] ); ?>
+                                </option>
+                            </select>
+                            <button type="button" class="button" id="wp-puller-fetch-branches">
+                                <span class="dashicons dashicons-update"></span>
+                                <?php esc_html_e( 'Fetch Branches', 'wp-puller' ); ?>
+                            </button>
+                        </div>
+                        <p class="description"><?php esc_html_e( 'Select a branch to track for updates. Click "Fetch Branches" to load available branches from GitHub.', 'wp-puller' ); ?></p>
                     </div>
 
                     <div class="wp-puller-field">
