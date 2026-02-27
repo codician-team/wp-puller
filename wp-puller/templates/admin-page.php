@@ -12,10 +12,12 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 $status       = $data['status'];
 $theme_info   = $data['theme_info'];
+$plugin_info  = $data['plugin_info'];
 $webhook_info = $data['webhook_info'];
 $backups      = $data['backups'];
 $logs         = $data['logs'];
 $backup_class = $data['backup_class'];
+$asset_type   = $data['asset_type'];
 $masked_pat   = WP_Puller_Admin::get_masked_pat();
 $pat_status   = WP_Puller_Admin::get_pat_status();
 ?>
@@ -41,14 +43,25 @@ $pat_status   = WP_Puller_Admin::get_pat_status();
             </div>
             <div class="wp-puller-card-body">
                 <div class="wp-puller-status-grid">
-                    <div class="wp-puller-status-item">
-                        <span class="wp-puller-status-label"><?php esc_html_e( 'Active Theme', 'wp-puller' ); ?></span>
-                        <span class="wp-puller-status-value"><?php echo esc_html( $theme_info['name'] ); ?></span>
-                    </div>
-                    <div class="wp-puller-status-item">
-                        <span class="wp-puller-status-label"><?php esc_html_e( 'Theme Version', 'wp-puller' ); ?></span>
-                        <span class="wp-puller-status-value"><?php echo esc_html( $theme_info['version'] ?: '-' ); ?></span>
-                    </div>
+                    <?php if ( 'plugin' === $asset_type && ! empty( $plugin_info ) ) : ?>
+                        <div class="wp-puller-status-item">
+                            <span class="wp-puller-status-label"><?php esc_html_e( 'Target Plugin', 'wp-puller' ); ?></span>
+                            <span class="wp-puller-status-value"><?php echo esc_html( $plugin_info['name'] ?: $plugin_info['slug'] ?: '-' ); ?></span>
+                        </div>
+                        <div class="wp-puller-status-item">
+                            <span class="wp-puller-status-label"><?php esc_html_e( 'Plugin Version', 'wp-puller' ); ?></span>
+                            <span class="wp-puller-status-value"><?php echo esc_html( $plugin_info['version'] ?: '-' ); ?></span>
+                        </div>
+                    <?php else : ?>
+                        <div class="wp-puller-status-item">
+                            <span class="wp-puller-status-label"><?php esc_html_e( 'Active Theme', 'wp-puller' ); ?></span>
+                            <span class="wp-puller-status-value"><?php echo esc_html( $theme_info['name'] ); ?></span>
+                        </div>
+                        <div class="wp-puller-status-item">
+                            <span class="wp-puller-status-label"><?php esc_html_e( 'Theme Version', 'wp-puller' ); ?></span>
+                            <span class="wp-puller-status-value"><?php echo esc_html( $theme_info['version'] ?: '-' ); ?></span>
+                        </div>
+                    <?php endif; ?>
                     <div class="wp-puller-status-item">
                         <span class="wp-puller-status-label"><?php esc_html_e( 'Current Commit', 'wp-puller' ); ?></span>
                         <span class="wp-puller-status-value wp-puller-mono" id="current-commit">
@@ -68,6 +81,23 @@ $pat_status   = WP_Puller_Admin::get_pat_status();
                         </span>
                     </div>
                 </div>
+
+                <?php
+                $deployed_branch = get_option( 'wp_puller_deployed_branch', '' );
+                if ( ! empty( $deployed_branch ) && $deployed_branch !== $status['branch'] ) :
+                ?>
+                    <div class="wp-puller-deployed-notice">
+                        <span class="dashicons dashicons-info"></span>
+                        <?php
+                        printf(
+                            /* translators: %1$s: deployed branch, %2$s: configured branch */
+                            esc_html__( 'Currently deployed from branch "%1$s" (configured: "%2$s")', 'wp-puller' ),
+                            esc_html( $deployed_branch ),
+                            esc_html( $status['branch'] )
+                        );
+                        ?>
+                    </div>
+                <?php endif; ?>
 
                 <div class="wp-puller-actions">
                     <button type="button" class="button" id="wp-puller-check-updates" <?php disabled( ! $status['is_configured'] ); ?>>
@@ -92,6 +122,27 @@ $pat_status   = WP_Puller_Admin::get_pat_status();
             <div class="wp-puller-card-body">
                 <form id="wp-puller-settings-form">
                     <div class="wp-puller-field">
+                        <label><?php esc_html_e( 'Asset Type', 'wp-puller' ); ?></label>
+                        <div class="wp-puller-radio-group">
+                            <label class="wp-puller-radio-label">
+                                <input type="radio"
+                                       name="asset_type"
+                                       value="theme"
+                                       <?php checked( $asset_type, 'theme' ); ?>>
+                                <?php esc_html_e( 'Theme', 'wp-puller' ); ?>
+                            </label>
+                            <label class="wp-puller-radio-label">
+                                <input type="radio"
+                                       name="asset_type"
+                                       value="plugin"
+                                       <?php checked( $asset_type, 'plugin' ); ?>>
+                                <?php esc_html_e( 'Plugin', 'wp-puller' ); ?>
+                            </label>
+                        </div>
+                        <p class="description"><?php esc_html_e( 'Choose whether this repository contains a WordPress theme or plugin.', 'wp-puller' ); ?></p>
+                    </div>
+
+                    <div class="wp-puller-field">
                         <label for="wp-puller-repo-url"><?php esc_html_e( 'Repository URL', 'wp-puller' ); ?></label>
                         <div class="wp-puller-input-group">
                             <input type="url"
@@ -104,7 +155,7 @@ $pat_status   = WP_Puller_Admin::get_pat_status();
                                 <?php esc_html_e( 'Test', 'wp-puller' ); ?>
                             </button>
                         </div>
-                        <p class="description"><?php esc_html_e( 'Enter the full GitHub repository URL containing your theme.', 'wp-puller' ); ?></p>
+                        <p class="description"><?php esc_html_e( 'Enter the full GitHub repository URL.', 'wp-puller' ); ?></p>
                     </div>
 
                     <div class="wp-puller-field">
@@ -120,18 +171,35 @@ $pat_status   = WP_Puller_Admin::get_pat_status();
                                 <?php esc_html_e( 'Fetch Branches', 'wp-puller' ); ?>
                             </button>
                         </div>
-                        <p class="description"><?php esc_html_e( 'Select a branch to track for updates. Click "Fetch Branches" to load available branches from GitHub.', 'wp-puller' ); ?></p>
+                        <p class="description"><?php esc_html_e( 'Select a branch to track for updates. Click "Fetch Branches" to load available branches.', 'wp-puller' ); ?></p>
                     </div>
 
-                    <div class="wp-puller-field">
-                        <label for="wp-puller-theme-path"><?php esc_html_e( 'Theme Path', 'wp-puller' ); ?></label>
+                    <div class="wp-puller-field wp-puller-field-theme-path" id="wp-puller-theme-path-field">
+                        <label for="wp-puller-theme-path">
+                            <span class="wp-puller-label-theme"><?php esc_html_e( 'Theme Path', 'wp-puller' ); ?></span>
+                            <span class="wp-puller-label-plugin" style="display:none;"><?php esc_html_e( 'Plugin Path', 'wp-puller' ); ?></span>
+                        </label>
                         <input type="text"
                                id="wp-puller-theme-path"
                                name="theme_path"
                                value="<?php echo esc_attr( $status['theme_path'] ); ?>"
-                               placeholder="<?php esc_attr_e( 'Leave empty if theme is at repo root', 'wp-puller' ); ?>"
+                               placeholder="<?php esc_attr_e( 'Leave empty if at repo root', 'wp-puller' ); ?>"
                                class="regular-text">
-                        <p class="description"><?php esc_html_e( 'Subdirectory containing the theme (e.g., "my-theme" or "themes/starter"). Leave empty if theme files are at repository root.', 'wp-puller' ); ?></p>
+                        <p class="description">
+                            <span class="wp-puller-label-theme"><?php esc_html_e( 'Subdirectory containing the theme (e.g., "my-theme"). Leave empty if at repo root.', 'wp-puller' ); ?></span>
+                            <span class="wp-puller-label-plugin" style="display:none;"><?php esc_html_e( 'Subdirectory containing the plugin (e.g., "src"). Leave empty if at repo root.', 'wp-puller' ); ?></span>
+                        </p>
+                    </div>
+
+                    <div class="wp-puller-field wp-puller-field-plugin-slug" id="wp-puller-plugin-slug-field" style="<?php echo 'plugin' !== $asset_type ? 'display:none;' : ''; ?>">
+                        <label for="wp-puller-plugin-slug"><?php esc_html_e( 'Plugin Slug', 'wp-puller' ); ?></label>
+                        <input type="text"
+                               id="wp-puller-plugin-slug"
+                               name="plugin_slug"
+                               value="<?php echo esc_attr( get_option( 'wp_puller_plugin_slug', '' ) ); ?>"
+                               placeholder="<?php esc_attr_e( 'my-plugin', 'wp-puller' ); ?>"
+                               class="regular-text">
+                        <p class="description"><?php esc_html_e( 'The plugin directory name in wp-content/plugins/. This is where files will be deployed.', 'wp-puller' ); ?></p>
                     </div>
 
                     <div class="wp-puller-field">
@@ -193,6 +261,39 @@ $pat_status   = WP_Puller_Admin::get_pat_status();
                 </form>
             </div>
         </div>
+
+        <!-- Branch Testing Card -->
+        <?php if ( $status['is_configured'] ) : ?>
+        <div class="wp-puller-card wp-puller-card-branches">
+            <div class="wp-puller-card-header">
+                <h2><?php esc_html_e( 'Branch Testing', 'wp-puller' ); ?></h2>
+                <button type="button" class="button button-small" id="wp-puller-refresh-branches">
+                    <span class="dashicons dashicons-update"></span>
+                    <?php esc_html_e( 'Refresh', 'wp-puller' ); ?>
+                </button>
+            </div>
+            <div class="wp-puller-card-body">
+                <p class="description" style="margin: 0 0 12px;">
+                    <?php esc_html_e( 'Deploy any branch to test. A backup is created automatically before switching.', 'wp-puller' ); ?>
+                </p>
+                <div id="wp-puller-branch-list" class="wp-puller-branch-list">
+                    <p class="wp-puller-empty"><?php esc_html_e( 'Click "Refresh" to load branches.', 'wp-puller' ); ?></p>
+                </div>
+
+                <!-- Comparison Modal -->
+                <div id="wp-puller-compare-panel" class="wp-puller-compare-panel" style="display: none;">
+                    <div class="wp-puller-compare-header">
+                        <h3 id="wp-puller-compare-title"></h3>
+                        <button type="button" class="button button-small" id="wp-puller-close-compare">
+                            <span class="dashicons dashicons-no-alt"></span>
+                        </button>
+                    </div>
+                    <div id="wp-puller-compare-content" class="wp-puller-compare-content">
+                    </div>
+                </div>
+            </div>
+        </div>
+        <?php endif; ?>
 
         <!-- Webhook Card -->
         <div class="wp-puller-card wp-puller-card-webhook">

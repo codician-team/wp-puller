@@ -605,6 +605,297 @@
     visibility: hidden;
 }
 
+/* Badge info variant */
+.wp-puller-badge-info {
+    background: #f0f6fc;
+    color: #1d4ed8;
+}
+
+/* Radio group */
+.wp-puller-radio-group {
+    display: flex;
+    gap: 16px;
+    margin-bottom: 4px;
+}
+
+.wp-puller-radio-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-weight: 400;
+    cursor: pointer;
+}
+
+.wp-puller-radio-label input[type="radio"] {
+    margin: 0;
+}
+
+/* Deployed notice */
+.wp-puller-deployed-notice {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 12px;
+    margin-bottom: 16px;
+    background: #f0f6fc;
+    border: 1px solid #72aee6;
+    border-radius: 4px;
+    font-size: 13px;
+    color: #1d4ed8;
+}
+
+.wp-puller-deployed-notice .dashicons {
+    font-size: 16px;
+    width: 16px;
+    height: 16px;
+    color: #72aee6;
+}
+
+/* Branch Testing Card */
+.wp-puller-card-branches {
+    grid-column: span 2;
+}
+
+@media (max-width: 1024px) {
+    .wp-puller-card-branches {
+        grid-column: span 1;
+    }
+}
+
+.wp-puller-branch-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+}
+
+.wp-puller-branch-table th {
+    text-align: left;
+    padding: 8px 10px;
+    border-bottom: 2px solid #f0f0f1;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: #787c82;
+    font-weight: 500;
+}
+
+.wp-puller-branch-table td {
+    padding: 8px 10px;
+    border-bottom: 1px solid #f0f0f1;
+    vertical-align: middle;
+}
+
+.wp-puller-branch-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+.wp-puller-branch-row:hover {
+    background: #f6f7f7;
+}
+
+.wp-puller-branch-deployed {
+    background: #edfaef;
+}
+
+.wp-puller-branch-deployed:hover {
+    background: #e0f5e4;
+}
+
+.wp-puller-branch-name-cell {
+    white-space: nowrap;
+}
+
+.wp-puller-branch-name-text {
+    font-weight: 500;
+    color: #1d2327;
+}
+
+.wp-puller-branch-name-cell .wp-puller-badge {
+    font-size: 10px;
+    padding: 1px 5px;
+    vertical-align: middle;
+    margin-left: 4px;
+}
+
+.wp-puller-branch-message {
+    color: #50575e;
+    max-width: 250px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.wp-puller-branch-actions-cell {
+    white-space: nowrap;
+    text-align: right;
+}
+
+.wp-puller-branch-actions-cell .button {
+    margin-left: 4px;
+}
+
+.wp-puller-branch-actions-cell .dashicons {
+    font-size: 14px;
+    width: 14px;
+    height: 14px;
+    line-height: 24px;
+}
+
+/* Comparison Panel */
+.wp-puller-compare-panel {
+    margin-top: 16px;
+    padding-top: 16px;
+    border-top: 1px solid #f0f0f1;
+}
+
+.wp-puller-compare-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+}
+
+.wp-puller-compare-header h3 {
+    margin: 0;
+    font-size: 13px;
+    font-weight: 600;
+    color: #1d2327;
+    font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+}
+
+.wp-puller-compare-header .button .dashicons {
+    font-size: 16px;
+    width: 16px;
+    height: 16px;
+    line-height: 24px;
+}
+
+.wp-puller-compare-summary {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-bottom: 16px;
+    padding: 10px 12px;
+    background: #f6f7f7;
+    border-radius: 4px;
+}
+
+.wp-puller-compare-stat {
+    font-size: 13px;
+    color: #50575e;
+}
+
+.wp-puller-compare-ahead {
+    color: #1e7e34;
+    font-weight: 500;
+}
+
+.wp-puller-compare-behind {
+    color: #996800;
+    font-weight: 500;
+}
+
+.wp-puller-compare-section {
+    margin-bottom: 16px;
+}
+
+.wp-puller-compare-section h4 {
+    margin: 0 0 8px;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: #787c82;
+}
+
+.wp-puller-compare-commits {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+.wp-puller-compare-commits li {
+    padding: 4px 0;
+    font-size: 12px;
+    color: #1d2327;
+    border-bottom: 1px solid #f0f0f1;
+}
+
+.wp-puller-compare-commits li:last-child {
+    border-bottom: none;
+}
+
+.wp-puller-compare-commits code {
+    background: #f0f0f1;
+    padding: 1px 4px;
+    border-radius: 2px;
+    font-size: 11px;
+}
+
+.wp-puller-compare-author {
+    color: #787c82;
+    font-size: 11px;
+}
+
+.wp-puller-compare-files {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    max-height: 250px;
+    overflow-y: auto;
+}
+
+.wp-puller-compare-files li {
+    padding: 3px 0;
+    font-size: 12px;
+    font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+    color: #1d2327;
+}
+
+.wp-puller-file-status {
+    display: inline-block;
+    width: 16px;
+    text-align: center;
+    font-weight: 700;
+}
+
+.wp-puller-file-added .wp-puller-file-status {
+    color: #1e7e34;
+}
+
+.wp-puller-file-removed .wp-puller-file-status {
+    color: #d63638;
+}
+
+.wp-puller-file-modified .wp-puller-file-status {
+    color: #996800;
+}
+
+.wp-puller-file-renamed .wp-puller-file-status {
+    color: #72aee6;
+}
+
+.wp-puller-file-changes {
+    margin-left: 8px;
+    font-size: 11px;
+}
+
+.wp-puller-additions {
+    color: #1e7e34;
+    margin-right: 4px;
+}
+
+.wp-puller-deletions {
+    color: #d63638;
+}
+
+.wp-puller-compare-more {
+    color: #787c82;
+    font-style: italic;
+    font-family: inherit;
+}
+
 /* Responsive adjustments */
 @media (max-width: 600px) {
     .wp-puller-wrap {
@@ -640,5 +931,21 @@
 
     .wp-puller-backup-actions {
         align-self: flex-end;
+    }
+
+    .wp-puller-branch-table {
+        font-size: 12px;
+    }
+
+    .wp-puller-branch-table th:nth-child(3),
+    .wp-puller-branch-table td:nth-child(3),
+    .wp-puller-branch-table th:nth-child(4),
+    .wp-puller-branch-table td:nth-child(4) {
+        display: none;
+    }
+
+    .wp-puller-radio-group {
+        flex-direction: column;
+        gap: 8px;
     }
 }

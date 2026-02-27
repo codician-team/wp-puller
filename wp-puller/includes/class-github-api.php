@@ -437,6 +437,141 @@ class WP_Puller_GitHub_API {
     }
 
     /**
+     * Get branches with their latest commit info.
+     *
+     * @param string $owner Repository owner.
+     * @param string $repo  Repository name.
+     * @return array|WP_Error Array of branch data with commit info.
+     */
+    public function get_branches_with_info( $owner, $repo ) {
+        $cache_key = self::CACHE_PREFIX . 'branches_info_' . md5( $owner . $repo );
+        $cached    = get_transient( $cache_key );
+
+        if ( false !== $cached ) {
+            return $cached;
+        }
+
+        $response = $this->api_request( "/repos/{$owner}/{$repo}/branches" );
+
+        if ( is_wp_error( $response ) ) {
+            return $response;
+        }
+
+        $branches = array();
+        foreach ( $response as $branch ) {
+            $branches[] = array(
+                'name'      => $branch['name'],
+                'sha'       => isset( $branch['commit']['sha'] ) ? $branch['commit']['sha'] : '',
+                'short_sha' => isset( $branch['commit']['sha'] ) ? substr( $branch['commit']['sha'], 0, 7 ) : '',
+            );
+        }
+
+        set_transient( $cache_key, $branches, self::CACHE_DURATION * 2 );
+
+        return $branches;
+    }
+
+    /**
+     * Compare two refs (branches, tags, or commits).
+     *
+     * @param string $owner Repository owner.
+     * @param string $repo  Repository name.
+     * @param string $base  Base ref.
+     * @param string $head  Head ref.
+     * @return array|WP_Error Comparison data.
+     */
+    public function compare_commits( $owner, $repo, $base, $head ) {
+        $cache_key = self::CACHE_PREFIX . 'compare_' . md5( $owner . $repo . $base . $head );
+        $cached    = get_transient( $cache_key );
+
+        if ( false !== $cached ) {
+            return $cached;
+        }
+
+        $response = $this->api_request(
+            sprintf( '/repos/%s/%s/compare/%s...%s', $owner, $repo, $base, $head )
+        );
+
+        if ( is_wp_error( $response ) ) {
+            return $response;
+        }
+
+        $commits = array();
+        if ( isset( $response['commits'] ) ) {
+            foreach ( $response['commits'] as $commit ) {
+                $commits[] = array(
+                    'sha'       => $commit['sha'],
+                    'short_sha' => substr( $commit['sha'], 0, 7 ),
+                    'message'   => isset( $commit['commit']['message'] ) ? $commit['commit']['message'] : '',
+                    'author'    => isset( $commit['commit']['author']['name'] ) ? $commit['commit']['author']['name'] : '',
+                    'date'      => isset( $commit['commit']['author']['date'] ) ? $commit['commit']['author']['date'] : '',
+                );
+            }
+        }
+
+        $files = array();
+        if ( isset( $response['files'] ) ) {
+            foreach ( $response['files'] as $file ) {
+                $files[] = array(
+                    'filename'  => $file['filename'],
+                    'status'    => $file['status'],
+                    'additions' => $file['additions'],
+                    'deletions' => $file['deletions'],
+                    'changes'   => $file['changes'],
+                );
+            }
+        }
+
+        $data = array(
+            'status'        => isset( $response['status'] ) ? $response['status'] : '',
+            'ahead_by'      => isset( $response['ahead_by'] ) ? $response['ahead_by'] : 0,
+            'behind_by'     => isset( $response['behind_by'] ) ? $response['behind_by'] : 0,
+            'total_commits'  => isset( $response['total_commits'] ) ? $response['total_commits'] : 0,
+            'commits'       => $commits,
+            'files'         => $files,
+        );
+
+        set_transient( $cache_key, $data, self::CACHE_DURATION * 3 );
+
+        return $data;
+    }
+
+    /**
+     * Get repository tags.
+     *
+     * @param string $owner Repository owner.
+     * @param string $repo  Repository name.
+     * @return array|WP_Error
+     */
+    public function get_tags( $owner, $repo ) {
+        $cache_key = self::CACHE_PREFIX . 'tags_' . md5( $owner . $repo );
+        $cached    = get_transient( $cache_key );
+
+        if ( false !== $cached ) {
+            return $cached;
+        }
+
+        $response = $this->api_request( "/repos/{$owner}/{$repo}/tags" );
+
+        if ( is_wp_error( $response ) ) {
+            return $response;
+        }
+
+        $tags = array();
+        foreach ( $response as $tag ) {
+            $tags[] = array(
+                'name'      => $tag['name'],
+                'sha'       => isset( $tag['commit']['sha'] ) ? $tag['commit']['sha'] : '',
+                'short_sha' => isset( $tag['commit']['sha'] ) ? substr( $tag['commit']['sha'], 0, 7 ) : '',
+            );
+        }
+
+        set_transient( $cache_key, $tags, self::CACHE_DURATION * 2 );
+
+        return $tags;
+    }
+
+    /**
      * Clear all caches.
      */
     public function clear_cache() {

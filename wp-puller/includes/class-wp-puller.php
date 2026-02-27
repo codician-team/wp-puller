@@ -22,7 +22,7 @@ final class WP_Puller {
      *
      * @var string
      */
-    public $version = '1.0.7';
+    public $version = '1.1.0';
 
     /**
      * The single instance of the class.
@@ -51,6 +51,13 @@ final class WP_Puller {
      * @var WP_Puller_Theme_Updater
      */
     public $updater = null;
+
+    /**
+     * Plugin updater instance.
+     *
+     * @var WP_Puller_Plugin_Updater
+     */
+    public $plugin_updater = null;
 
     /**
      * Backup instance.
@@ -104,6 +111,7 @@ final class WP_Puller {
         require_once WP_PULLER_PLUGIN_DIR . 'includes/class-github-api.php';
         require_once WP_PULLER_PLUGIN_DIR . 'includes/class-backup.php';
         require_once WP_PULLER_PLUGIN_DIR . 'includes/class-theme-updater.php';
+        require_once WP_PULLER_PLUGIN_DIR . 'includes/class-plugin-updater.php';
         require_once WP_PULLER_PLUGIN_DIR . 'includes/class-webhook-handler.php';
 
         if ( is_admin() ) {
@@ -147,11 +155,12 @@ final class WP_Puller {
         $this->logger     = new WP_Puller_Logger();
         $this->github_api = new WP_Puller_GitHub_API();
         $this->backup     = new WP_Puller_Backup();
-        $this->updater    = new WP_Puller_Theme_Updater( $this->github_api, $this->backup, $this->logger );
-        $this->webhook    = new WP_Puller_Webhook_Handler( $this->updater, $this->logger );
+        $this->updater        = new WP_Puller_Theme_Updater( $this->github_api, $this->backup, $this->logger );
+        $this->plugin_updater = new WP_Puller_Plugin_Updater( $this->github_api, $this->backup, $this->logger );
+        $this->webhook        = new WP_Puller_Webhook_Handler( $this->updater, $this->plugin_updater, $this->logger );
 
         if ( is_admin() ) {
-            $this->admin = new WP_Puller_Admin( $this->github_api, $this->updater, $this->backup, $this->logger );
+            $this->admin = new WP_Puller_Admin( $this->github_api, $this->updater, $this->plugin_updater, $this->backup, $this->logger );
         }
     }
 

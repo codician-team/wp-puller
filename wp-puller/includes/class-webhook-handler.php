@@ -37,6 +37,13 @@ class WP_Puller_Webhook_Handler {
     private $updater;
 
     /**
+     * Plugin updater instance.
+     *
+     * @var WP_Puller_Plugin_Updater
+     */
+    private $plugin_updater;
+
+    /**
      * Logger instance.
      *
      * @var WP_Puller_Logger
@@ -46,12 +53,14 @@ class WP_Puller_Webhook_Handler {
     /**
      * Constructor.
      *
-     * @param WP_Puller_Theme_Updater $updater Theme updater instance.
-     * @param WP_Puller_Logger        $logger  Logger instance.
+     * @param WP_Puller_Theme_Updater  $updater        Theme updater instance.
+     * @param WP_Puller_Plugin_Updater $plugin_updater Plugin updater instance.
+     * @param WP_Puller_Logger         $logger         Logger instance.
      */
-    public function __construct( $updater, $logger ) {
-        $this->updater = $updater;
-        $this->logger  = $logger;
+    public function __construct( $updater, $plugin_updater, $logger ) {
+        $this->updater        = $updater;
+        $this->plugin_updater = $plugin_updater;
+        $this->logger         = $logger;
     }
 
     /**
@@ -237,7 +246,13 @@ class WP_Puller_Webhook_Handler {
             WP_Puller_Logger::SOURCE_WEBHOOK
         );
 
-        $result = $this->updater->update( WP_Puller_Logger::SOURCE_WEBHOOK );
+        $asset_type = get_option( 'wp_puller_asset_type', 'theme' );
+
+        if ( 'plugin' === $asset_type ) {
+            $result = $this->plugin_updater->update( WP_Puller_Logger::SOURCE_WEBHOOK );
+        } else {
+            $result = $this->updater->update( WP_Puller_Logger::SOURCE_WEBHOOK );
+        }
 
         if ( is_wp_error( $result ) ) {
             return new WP_REST_Response(
@@ -252,7 +267,7 @@ class WP_Puller_Webhook_Handler {
         return new WP_REST_Response(
             array(
                 'success' => true,
-                'message' => 'Theme updated successfully.',
+                'message' => ucfirst( $asset_type ) . ' updated successfully.',
             ),
             200
         );

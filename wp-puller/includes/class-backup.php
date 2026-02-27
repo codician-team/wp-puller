@@ -109,6 +109,79 @@ class WP_Puller_Backup {
     }
 
     /**
+     * Create a backup of a WordPress plugin.
+     *
+     * @param string $plugin_slug Plugin directory name.
+     * @return string|false|WP_Error Backup path on success, false if plugin doesn't exist, WP_Error on failure.
+     */
+    public function create_plugin_backup( $plugin_slug ) {
+        $plugin_dir = WP_PLUGIN_DIR . '/' . $plugin_slug;
+
+        if ( ! is_dir( $plugin_dir ) ) {
+            return false;
+        }
+
+        $result = $this->ensure_backup_dir();
+
+        if ( is_wp_error( $result ) ) {
+            return $result;
+        }
+
+        $timestamp   = gmdate( 'Y-m-d_H-i-s' );
+        $backup_name = 'plugin_' . $plugin_slug . '_' . $timestamp;
+        $backup_path = $this->get_backup_dir() . '/' . $backup_name;
+
+        if ( ! $this->recursive_copy( $plugin_dir, $backup_path ) ) {
+            return new WP_Error(
+                'backup_failed',
+                __( 'Failed to create plugin backup.', 'wp-puller' )
+            );
+        }
+
+        $this->cleanup_old_backups( 'plugin_' . $plugin_slug );
+
+        return $backup_path;
+    }
+
+    /**
+     * Restore a plugin from a backup.
+     *
+     * @param string $backup_name Backup directory name.
+     * @param string $plugin_slug Plugin directory name.
+     * @return bool|WP_Error True on success, WP_Error on failure.
+     */
+    public function restore_plugin_backup( $backup_name, $plugin_slug ) {
+        $backup_path = $this->get_backup_dir() . '/' . sanitize_file_name( $backup_name );
+
+        if ( ! is_dir( $backup_path ) ) {
+            return new WP_Error(
+                'backup_not_found',
+                __( 'Backup not found.', 'wp-puller' )
+            );
+        }
+
+        $plugin_dir = WP_PLUGIN_DIR . '/' . $plugin_slug;
+
+        if ( is_dir( $plugin_dir ) ) {
+            if ( ! $this->recursive_delete( $plugin_dir ) ) {
+                return new WP_Error(
+                    'delete_failed',
+                    __( 'Failed to remove current plugin files.', 'wp-puller' )
+                );
+            }
+        }
+
+        if ( ! $this->recursive_copy( $backup_path, $plugin_dir ) ) {
+            return new WP_Error(
+                'restore_failed',
+                __( 'Failed to restore plugin from backup.', 'wp-puller' )
+            );
+        }
+
+        return true;
+    }
+
+    /**
      * Restore theme from a backup.
      *
      * @param string $backup_name Backup directory name.
