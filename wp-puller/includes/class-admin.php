@@ -84,7 +84,6 @@ class WP_Puller_Admin {
         add_action( 'wp_ajax_wp_puller_delete_backup', array( $this, 'ajax_delete_backup' ) );
         add_action( 'wp_ajax_wp_puller_regenerate_secret', array( $this, 'ajax_regenerate_secret' ) );
         add_action( 'wp_ajax_wp_puller_clear_logs', array( $this, 'ajax_clear_logs' ) );
-        add_action( 'wp_ajax_wp_puller_fetch_branches', array( $this, 'ajax_fetch_branches' ) );
         add_action( 'wp_ajax_wp_puller_deploy_branch', array( $this, 'ajax_deploy_branch' ) );
         add_action( 'wp_ajax_wp_puller_get_branches_with_info', array( $this, 'ajax_get_branches_with_info' ) );
         add_action( 'wp_ajax_wp_puller_compare_branches', array( $this, 'ajax_compare_branches' ) );
@@ -151,9 +150,6 @@ class WP_Puller_Admin {
                 'confirmRestore'   => __( 'Are you sure you want to restore this backup? Your current theme will be replaced.', 'wp-puller' ),
                 'confirmDelete'    => __( 'Are you sure you want to delete this backup?', 'wp-puller' ),
                 'confirmRegenerate'=> __( 'Are you sure? You will need to update the secret in GitHub.', 'wp-puller' ),
-                'fetchingBranches'    => __( 'Fetching branches...', 'wp-puller' ),
-                'noBranches'          => __( 'No branches found.', 'wp-puller' ),
-                'selectBranch'        => __( 'Select a branch...', 'wp-puller' ),
                 'deployingBranch'     => __( 'Deploying branch...', 'wp-puller' ),
                 'branchDeployed'      => __( 'Branch deployed successfully!', 'wp-puller' ),
                 'confirmBranchDeploy' => __( 'Deploy this branch? A backup will be created first.', 'wp-puller' ),
@@ -432,59 +428,6 @@ class WP_Puller_Admin {
         ) );
     }
 
-    /**
-     * AJAX: Fetch branches from GitHub repository.
-     */
-    public function ajax_fetch_branches() {
-        $this->verify_ajax_request();
-
-        $repo_url = isset( $_POST['repo_url'] ) ? esc_url_raw( wp_unslash( $_POST['repo_url'] ) ) : '';
-
-        if ( empty( $repo_url ) ) {
-            $repo_url = get_option( 'wp_puller_repo_url', '' );
-        }
-
-        if ( empty( $repo_url ) ) {
-            wp_send_json_error( array(
-                'message' => __( 'Please enter a repository URL first.', 'wp-puller' ),
-            ) );
-        }
-
-        $parsed = $this->github_api->parse_repo_url( $repo_url );
-
-        if ( ! $parsed ) {
-            wp_send_json_error( array(
-                'message' => __( 'Invalid GitHub repository URL.', 'wp-puller' ),
-            ) );
-        }
-
-        $this->github_api->clear_cache();
-
-        // Fetch the 10 most recent branches and extract just the names
-        $branches_info = $this->github_api->get_branches_with_info( $parsed['owner'], $parsed['repo'], 10 );
-
-        if ( is_wp_error( $branches_info ) ) {
-            wp_send_json_error( array(
-                'message' => $branches_info->get_error_message(),
-            ) );
-        }
-
-        $branch_names = array();
-        foreach ( $branches_info as $branch ) {
-            $branch_names[] = $branch['name'];
-        }
-
-        $repo_info = $this->github_api->get_repo_info( $parsed['owner'], $parsed['repo'] );
-        $default_branch = 'main';
-        if ( ! is_wp_error( $repo_info ) && isset( $repo_info['default_branch'] ) ) {
-            $default_branch = $repo_info['default_branch'];
-        }
-
-        wp_send_json_success( array(
-            'branches'       => $branch_names,
-            'default_branch' => $default_branch,
-        ) );
-    }
 
     /**
      * AJAX: Deploy a specific branch for testing.

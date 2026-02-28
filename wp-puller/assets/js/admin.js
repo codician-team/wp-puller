@@ -17,7 +17,6 @@
         bindEvents: function() {
             $('#wp-puller-settings-form').on('submit', this.saveSettings.bind(this));
             $('#wp-puller-test-connection').on('click', this.testConnection.bind(this));
-            $('#wp-puller-fetch-branches').on('click', this.fetchBranches.bind(this));
             $('#wp-puller-check-updates').on('click', this.checkUpdates.bind(this));
             $('#wp-puller-update-now').on('click', this.updateTheme.bind(this));
             $('#wp-puller-regenerate-secret').on('click', this.regenerateSecret.bind(this));
@@ -127,88 +126,6 @@
                             }
                         }
                         WPPuller.showNotice(msg, 'success');
-
-                        // Auto-fetch branches after successful connection test
-                        WPPuller.fetchBranches(null, response.data.repo ? response.data.repo.default_branch : null);
-                    } else {
-                        WPPuller.showNotice(response.data.message, 'error');
-                    }
-                },
-                error: function() {
-                    WPPuller.showNotice(wpPuller.strings.error, 'error');
-                },
-                complete: function() {
-                    WPPuller.setLoading($btn, false);
-                }
-            });
-        },
-
-        fetchBranches: function(e, defaultBranch) {
-            var $btn = $('#wp-puller-fetch-branches');
-            var $select = $('#wp-puller-branch');
-            var repoUrl = $('#wp-puller-repo-url').val();
-
-            if (!repoUrl) {
-                this.showNotice('Please enter a repository URL first.', 'error');
-                return;
-            }
-
-            // If called from a click event, use the button from the event
-            if (e && e.currentTarget) {
-                $btn = $(e.currentTarget);
-            }
-
-            this.setLoading($btn, true);
-
-            var currentBranch = $select.val() || wpPuller.currentBranch || 'main';
-
-            $.ajax({
-                url: wpPuller.ajaxUrl,
-                type: 'POST',
-                data: {
-                    action: 'wp_puller_fetch_branches',
-                    nonce: wpPuller.nonce,
-                    repo_url: repoUrl
-                },
-                success: function(response) {
-                    if (response.success) {
-                        var branches = response.data.branches;
-                        var repoDefault = defaultBranch || response.data.default_branch || 'main';
-
-                        $select.empty();
-
-                        if (branches.length === 0) {
-                            $select.append('<option value="">' + WPPuller.escapeHtml(wpPuller.strings.noBranches) + '</option>');
-                            return;
-                        }
-
-                        // Pin default branch first, keep recency order for the rest
-                        branches.sort(function(a, b) {
-                            if (a === repoDefault) return -1;
-                            if (b === repoDefault) return 1;
-                            return 0;
-                        });
-
-                        for (var i = 0; i < branches.length; i++) {
-                            var label = branches[i];
-                            if (branches[i] === repoDefault) {
-                                label += ' (default)';
-                            }
-                            var $option = $('<option></option>')
-                                .val(branches[i])
-                                .text(label);
-
-                            if (branches[i] === currentBranch) {
-                                $option.prop('selected', true);
-                            }
-
-                            $select.append($option);
-                        }
-
-                        // If the current saved branch wasn't in the list, select the default
-                        if ($select.val() === null && branches.length > 0) {
-                            $select.val(repoDefault);
-                        }
                     } else {
                         WPPuller.showNotice(response.data.message, 'error');
                     }

@@ -156,37 +156,6 @@ class WP_Puller_GitHub_API {
     }
 
     /**
-     * Get list of branches.
-     *
-     * @param string $owner Repository owner.
-     * @param string $repo  Repository name.
-     * @return array|WP_Error
-     */
-    public function get_branches( $owner, $repo ) {
-        $cache_key = self::CACHE_PREFIX . 'branches_' . md5( $owner . $repo );
-        $cached    = get_transient( $cache_key );
-
-        if ( false !== $cached ) {
-            return $cached;
-        }
-
-        $response = $this->api_request( "/repos/{$owner}/{$repo}/branches" );
-
-        if ( is_wp_error( $response ) ) {
-            return $response;
-        }
-
-        $branches = array();
-        foreach ( $response as $branch ) {
-            $branches[] = $branch['name'];
-        }
-
-        set_transient( $cache_key, $branches, self::CACHE_DURATION );
-
-        return $branches;
-    }
-
-    /**
      * Download repository archive as ZIP.
      *
      * @param string $owner  Repository owner.
