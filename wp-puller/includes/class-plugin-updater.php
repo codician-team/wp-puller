@@ -526,6 +526,7 @@ class WP_Puller_Plugin_Updater {
             'is_configured'   => ! empty( $repo_url ) && false !== $parsed && ! empty( $plugin_slug ),
             'repo_url'        => $repo_url,
             'branch'          => $branch,
+            'theme_path'      => get_option( 'wp_puller_theme_path', '' ),
             'plugin_slug'     => $plugin_slug,
             'current_commit'  => $current_commit,
             'short_commit'    => ! empty( $current_commit ) ? substr( $current_commit, 0, 7 ) : '',

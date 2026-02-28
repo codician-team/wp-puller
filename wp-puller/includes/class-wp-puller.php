@@ -22,7 +22,7 @@ final class WP_Puller {
      *
      * @var string
      */
-    public $version = '1.1.4';
+    public $version = '1.1.5';
 
     /**
      * The single instance of the class.
