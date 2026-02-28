@@ -437,34 +437,65 @@ class WP_Puller_GitHub_API {
     }
 
     /**
-     * Get branches with their latest commit info.
+     * Get the 10 most recently updated branches with commit info.
+     *
+     * Uses the GitHub repos API with per_page=10 to limit results,
+     * then fetches commit details for each to enable sorting by date.
      *
      * @param string $owner Repository owner.
      * @param string $repo  Repository name.
+     * @param int    $limit Maximum number of branches to return.
      * @return array|WP_Error Array of branch data with commit info.
      */
-    public function get_branches_with_info( $owner, $repo ) {
-        $cache_key = self::CACHE_PREFIX . 'branches_info_' . md5( $owner . $repo );
+    public function get_branches_with_info( $owner, $repo, $limit = 10 ) {
+        $cache_key = self::CACHE_PREFIX . 'branches_info_' . md5( $owner . $repo . $limit );
         $cached    = get_transient( $cache_key );
 
         if ( false !== $cached ) {
             return $cached;
         }
 
-        $response = $this->api_request( "/repos/{$owner}/{$repo}/branches" );
+        // Fetch branches -- request more than $limit so we can sort by date and keep the most recent
+        $fetch_count = min( $limit * 3, 100 );
+        $response = $this->api_request( "/repos/{$owner}/{$repo}/branches?per_page={$fetch_count}" );
 
         if ( is_wp_error( $response ) ) {
             return $response;
         }
 
+        // Gather branch data with commit details
         $branches = array();
         foreach ( $response as $branch ) {
-            $branches[] = array(
+            $sha  = isset( $branch['commit']['sha'] ) ? $branch['commit']['sha'] : '';
+            $data = array(
                 'name'      => $branch['name'],
-                'sha'       => isset( $branch['commit']['sha'] ) ? $branch['commit']['sha'] : '',
-                'short_sha' => isset( $branch['commit']['sha'] ) ? substr( $branch['commit']['sha'], 0, 7 ) : '',
+                'sha'       => $sha,
+                'short_sha' => $sha ? substr( $sha, 0, 7 ) : '',
+                'message'   => '',
+                'author'    => '',
+                'date'      => '',
+                'timestamp' => 0,
             );
+
+            // Fetch commit details for sorting by date
+            $commit = $this->get_latest_commit( $owner, $repo, $branch['name'] );
+            if ( ! is_wp_error( $commit ) ) {
+                $data['message']   = isset( $commit['message'] ) ? substr( $commit['message'], 0, 80 ) : '';
+                $data['author']    = isset( $commit['author'] ) ? $commit['author'] : '';
+                $data['date']      = isset( $commit['date'] ) ? $commit['date'] : '';
+                $data['timestamp'] = ! empty( $commit['date'] ) ? strtotime( $commit['date'] ) : 0;
+            }
+
+            $branches[] = $data;
         }
+
+        // Sort by most recent commit date first
+        usort( $branches, function( $a, $b ) {
+            return $b['timestamp'] - $a['timestamp'];
+        } );
+
+        // Keep only the most recent $limit branches
+        $branches = array_slice( $branches, 0, $limit );
 
         set_transient( $cache_key, $branches, self::CACHE_DURATION * 2 );
 

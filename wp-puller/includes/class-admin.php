@@ -522,7 +522,7 @@ class WP_Puller_Admin {
     }
 
     /**
-     * AJAX: Get all branches with commit info.
+     * AJAX: Get the 10 most recent branches with commit info.
      */
     public function ajax_get_branches_with_info() {
         $this->verify_ajax_request();
@@ -545,7 +545,8 @@ class WP_Puller_Admin {
 
         $this->github_api->clear_cache();
 
-        $branches = $this->github_api->get_branches_with_info( $parsed['owner'], $parsed['repo'] );
+        // Fetches up to 10 most recently updated branches, already sorted and enriched with commit info
+        $branches = $this->github_api->get_branches_with_info( $parsed['owner'], $parsed['repo'], 10 );
 
         if ( is_wp_error( $branches ) ) {
             wp_send_json_error( array(
@@ -553,32 +554,8 @@ class WP_Puller_Admin {
             ) );
         }
 
-        // Fetch commit details for each branch
-        $branch_details = array();
-        foreach ( $branches as $branch_data ) {
-            $commit = $this->github_api->get_latest_commit(
-                $parsed['owner'],
-                $parsed['repo'],
-                $branch_data['name']
-            );
-
-            $detail = array(
-                'name'      => $branch_data['name'],
-                'sha'       => $branch_data['sha'],
-                'short_sha' => $branch_data['short_sha'],
-            );
-
-            if ( ! is_wp_error( $commit ) ) {
-                $detail['message'] = isset( $commit['message'] ) ? substr( $commit['message'], 0, 80 ) : '';
-                $detail['author']  = isset( $commit['author'] ) ? $commit['author'] : '';
-                $detail['date']    = isset( $commit['date'] ) ? $commit['date'] : '';
-            }
-
-            $branch_details[] = $detail;
-        }
-
         wp_send_json_success( array(
-            'branches'        => $branch_details,
+            'branches'        => $branches,
             'configured'      => get_option( 'wp_puller_branch', 'main' ),
             'deployed_branch' => get_option( 'wp_puller_deployed_branch', '' ),
             'current_commit'  => get_option( 'wp_puller_latest_commit', '' ),
