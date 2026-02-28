@@ -458,6 +458,8 @@ class WP_Puller_Admin {
             ) );
         }
 
+        $this->github_api->clear_cache();
+
         // Fetch the 10 most recent branches and extract just the names
         $branches_info = $this->github_api->get_branches_with_info( $parsed['owner'], $parsed['repo'], 10 );
 

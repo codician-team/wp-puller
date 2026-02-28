@@ -437,10 +437,58 @@ class WP_Puller_GitHub_API {
     }
 
     /**
-     * Get the 10 most recently updated branches with commit info.
+     * Make a GraphQL request to GitHub.
      *
-     * Uses the GitHub repos API with per_page=10 to limit results,
-     * then fetches commit details for each to enable sorting by date.
+     * @param string $query     GraphQL query string.
+     * @param array  $variables Query variables.
+     * @return array|WP_Error
+     */
+    private function graphql_request( $query, $variables = array() ) {
+        $auth_header = $this->get_auth_header();
+
+        if ( empty( $auth_header ) ) {
+            return new WP_Error( 'no_auth', 'GraphQL requires authentication.' );
+        }
+
+        $body = array( 'query' => $query );
+        if ( ! empty( $variables ) ) {
+            $body['variables'] = $variables;
+        }
+
+        $response = wp_remote_post( self::API_BASE . '/graphql', array(
+            'timeout'   => 30,
+            'sslverify' => true,
+            'headers'   => array(
+                'Authorization' => $auth_header,
+                'Content-Type'  => 'application/json',
+                'User-Agent'    => 'WP-Puller/' . WP_PULLER_VERSION,
+            ),
+            'body'      => wp_json_encode( $body ),
+        ) );
+
+        if ( is_wp_error( $response ) ) {
+            return $response;
+        }
+
+        $status_code = wp_remote_retrieve_response_code( $response );
+        $data        = json_decode( wp_remote_retrieve_body( $response ), true );
+
+        if ( 200 !== $status_code ) {
+            $message = isset( $data['message'] ) ? $data['message'] : 'GraphQL error';
+            return new WP_Error( 'graphql_error', $message );
+        }
+
+        if ( ! empty( $data['errors'] ) ) {
+            return new WP_Error( 'graphql_error', $data['errors'][0]['message'] );
+        }
+
+        return $data;
+    }
+
+    /**
+     * Get the most recently updated branches with commit info.
+     *
+     * Uses GraphQL when authenticated (single API call) with REST fallback.
      *
      * @param string $owner Repository owner.
      * @param string $repo  Repository name.
@@ -455,15 +503,108 @@ class WP_Puller_GitHub_API {
             return $cached;
         }
 
-        // Fetch branches -- request more than $limit so we can sort by date and keep the most recent
+        // Try GraphQL first (single API call, returns branches with commit dates)
+        $branches = $this->get_branches_graphql( $owner, $repo, $limit );
+
+        // Fall back to REST API if GraphQL fails (e.g. no PAT for public repo)
+        if ( is_wp_error( $branches ) ) {
+            $branches = $this->get_branches_rest( $owner, $repo, $limit );
+        }
+
+        if ( is_wp_error( $branches ) ) {
+            return $branches;
+        }
+
+        set_transient( $cache_key, $branches, self::CACHE_DURATION * 2 );
+
+        return $branches;
+    }
+
+    /**
+     * Fetch branches with commit info via GraphQL (single API call).
+     *
+     * @param string $owner Repository owner.
+     * @param string $repo  Repository name.
+     * @param int    $limit Maximum number of branches to return.
+     * @return array|WP_Error
+     */
+    private function get_branches_graphql( $owner, $repo, $limit ) {
+        $query = '
+            query($owner: String!, $repo: String!, $count: Int!) {
+                repository(owner: $owner, name: $repo) {
+                    refs(refPrefix: "refs/heads/", first: $count, orderBy: {field: TAG_COMMIT_DATE, direction: DESC}) {
+                        nodes {
+                            name
+                            target {
+                                ... on Commit {
+                                    oid
+                                    messageHeadline
+                                    author {
+                                        name
+                                        date
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        ';
+
+        $result = $this->graphql_request( $query, array(
+            'owner' => $owner,
+            'repo'  => $repo,
+            'count' => $limit,
+        ) );
+
+        if ( is_wp_error( $result ) ) {
+            return $result;
+        }
+
+        $nodes = isset( $result['data']['repository']['refs']['nodes'] )
+            ? $result['data']['repository']['refs']['nodes']
+            : null;
+
+        if ( ! is_array( $nodes ) ) {
+            return new WP_Error( 'graphql_parse', 'Unexpected GraphQL response structure.' );
+        }
+
+        $branches = array();
+        foreach ( $nodes as $node ) {
+            $target = isset( $node['target'] ) ? $node['target'] : array();
+            $sha    = isset( $target['oid'] ) ? $target['oid'] : '';
+            $date   = isset( $target['author']['date'] ) ? $target['author']['date'] : '';
+
+            $branches[] = array(
+                'name'      => $node['name'],
+                'sha'       => $sha,
+                'short_sha' => $sha ? substr( $sha, 0, 7 ) : '',
+                'message'   => isset( $target['messageHeadline'] ) ? substr( $target['messageHeadline'], 0, 80 ) : '',
+                'author'    => isset( $target['author']['name'] ) ? $target['author']['name'] : '',
+                'date'      => $date,
+                'timestamp' => ! empty( $date ) ? strtotime( $date ) : 0,
+            );
+        }
+
+        return $branches;
+    }
+
+    /**
+     * Fetch branches with commit info via REST API (N+1 calls, fallback).
+     *
+     * @param string $owner Repository owner.
+     * @param string $repo  Repository name.
+     * @param int    $limit Maximum number of branches to return.
+     * @return array|WP_Error
+     */
+    private function get_branches_rest( $owner, $repo, $limit ) {
         $fetch_count = min( $limit * 3, 100 );
-        $response = $this->api_request( "/repos/{$owner}/{$repo}/branches?per_page={$fetch_count}" );
+        $response    = $this->api_request( "/repos/{$owner}/{$repo}/branches?per_page={$fetch_count}" );
 
         if ( is_wp_error( $response ) ) {
             return $response;
         }
 
-        // Gather branch data with commit details
         $branches = array();
         foreach ( $response as $branch ) {
             $sha  = isset( $branch['commit']['sha'] ) ? $branch['commit']['sha'] : '';
@@ -477,7 +618,6 @@ class WP_Puller_GitHub_API {
                 'timestamp' => 0,
             );
 
-            // Fetch commit details for sorting by date
             $commit = $this->get_latest_commit( $owner, $repo, $branch['name'] );
             if ( ! is_wp_error( $commit ) ) {
                 $data['message']   = isset( $commit['message'] ) ? substr( $commit['message'], 0, 80 ) : '';
@@ -489,17 +629,11 @@ class WP_Puller_GitHub_API {
             $branches[] = $data;
         }
 
-        // Sort by most recent commit date first
         usort( $branches, function( $a, $b ) {
             return $b['timestamp'] - $a['timestamp'];
         } );
 
-        // Keep only the most recent $limit branches
-        $branches = array_slice( $branches, 0, $limit );
-
-        set_transient( $cache_key, $branches, self::CACHE_DURATION * 2 );
-
-        return $branches;
+        return array_slice( $branches, 0, $limit );
     }
 
     /**
