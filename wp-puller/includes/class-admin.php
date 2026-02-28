@@ -458,12 +458,18 @@ class WP_Puller_Admin {
             ) );
         }
 
-        $branches = $this->github_api->get_branches( $parsed['owner'], $parsed['repo'] );
+        // Fetch the 10 most recent branches and extract just the names
+        $branches_info = $this->github_api->get_branches_with_info( $parsed['owner'], $parsed['repo'], 10 );
 
-        if ( is_wp_error( $branches ) ) {
+        if ( is_wp_error( $branches_info ) ) {
             wp_send_json_error( array(
-                'message' => $branches->get_error_message(),
+                'message' => $branches_info->get_error_message(),
             ) );
+        }
+
+        $branch_names = array();
+        foreach ( $branches_info as $branch ) {
+            $branch_names[] = $branch['name'];
         }
 
         $repo_info = $this->github_api->get_repo_info( $parsed['owner'], $parsed['repo'] );
@@ -473,7 +479,7 @@ class WP_Puller_Admin {
         }
 
         wp_send_json_success( array(
-            'branches'       => $branches,
+            'branches'       => $branch_names,
             'default_branch' => $default_branch,
         ) );
     }
