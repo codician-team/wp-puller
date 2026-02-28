@@ -182,11 +182,11 @@
                             return;
                         }
 
-                        // Sort: default branch first, then alphabetical
+                        // Pin default branch first, keep recency order for the rest
                         branches.sort(function(a, b) {
                             if (a === repoDefault) return -1;
                             if (b === repoDefault) return 1;
-                            return a.localeCompare(b);
+                            return 0;
                         });
 
                         for (var i = 0; i < branches.length; i++) {
