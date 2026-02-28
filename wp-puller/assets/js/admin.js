@@ -84,6 +84,9 @@
                 success: function(response) {
                     if (response.success) {
                         WPPuller.showNotice(response.data.message, 'success');
+                        setTimeout(function() {
+                            location.reload();
+                        }, 1500);
                     } else {
                         WPPuller.showNotice(response.data.message, 'error');
                     }
