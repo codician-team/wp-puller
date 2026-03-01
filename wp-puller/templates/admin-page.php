@@ -260,11 +260,16 @@ $pat_status     = WP_Puller_Admin::get_pat_status();
                         <p class="wp-puller-empty"><?php esc_html_e( 'No backups yet. A backup is created automatically before each update.', 'wp-puller' ); ?></p>
                     <?php else : ?>
                         <ul class="wp-puller-backup-list">
-                            <?php foreach ( $theme_backups as $backup ) : ?>
+                            <?php foreach ( $theme_backups as $backup ) :
+                                $backup_version = $backup_class->get_backup_version( $backup['path'], 'theme' );
+                            ?>
                                 <li class="wp-puller-backup-item" data-name="<?php echo esc_attr( $backup['name'] ); ?>">
                                     <div class="wp-puller-backup-info">
                                         <span class="wp-puller-backup-name"><?php echo esc_html( $backup['name'] ); ?></span>
                                         <span class="wp-puller-backup-meta">
+                                            <?php if ( $backup_version ) : ?>
+                                                v<?php echo esc_html( $backup_version ); ?> &middot;
+                                            <?php endif; ?>
                                             <?php echo esc_html( $backup['datetime'] ); ?> &middot;
                                             <?php echo esc_html( WP_Puller_Backup::format_size( $backup['size'] ) ); ?>
                                         </span>
@@ -513,11 +518,16 @@ $pat_status     = WP_Puller_Admin::get_pat_status();
                         <p class="wp-puller-empty"><?php esc_html_e( 'No backups yet. A backup is created automatically before each update.', 'wp-puller' ); ?></p>
                     <?php else : ?>
                         <ul class="wp-puller-backup-list">
-                            <?php foreach ( $plugin_backups as $backup ) : ?>
+                            <?php foreach ( $plugin_backups as $backup ) :
+                                $backup_version = $backup_class->get_backup_version( $backup['path'], 'plugin' );
+                            ?>
                                 <li class="wp-puller-backup-item" data-name="<?php echo esc_attr( $backup['name'] ); ?>">
                                     <div class="wp-puller-backup-info">
                                         <span class="wp-puller-backup-name"><?php echo esc_html( $backup['name'] ); ?></span>
                                         <span class="wp-puller-backup-meta">
+                                            <?php if ( $backup_version ) : ?>
+                                                v<?php echo esc_html( $backup_version ); ?> &middot;
+                                            <?php endif; ?>
                                             <?php echo esc_html( $backup['datetime'] ); ?> &middot;
                                             <?php echo esc_html( WP_Puller_Backup::format_size( $backup['size'] ) ); ?>
                                         </span>

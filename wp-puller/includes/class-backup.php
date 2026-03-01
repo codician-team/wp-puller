@@ -434,6 +434,67 @@ class WP_Puller_Backup {
     }
 
     /**
+     * Detect the version of a theme or plugin from a backup directory.
+     *
+     * @param string $backup_path Full path to the backup directory.
+     * @param string $type        'theme' or 'plugin'.
+     * @return string Version string or empty string if not found.
+     */
+    public function get_backup_version( $backup_path, $type = 'theme' ) {
+        if ( ! is_dir( $backup_path ) ) {
+            return '';
+        }
+
+        if ( 'theme' === $type ) {
+            $style = $backup_path . '/style.css';
+            if ( file_exists( $style ) ) {
+                return $this->extract_header_version( $style, 'Version' );
+            }
+            return '';
+        }
+
+        // Plugin: scan top-level PHP files for the "Plugin Name:" header.
+        $files = glob( $backup_path . '/*.php' );
+        if ( ! $files ) {
+            return '';
+        }
+
+        foreach ( $files as $file ) {
+            $version = $this->extract_header_version( $file, 'Version' );
+            if ( '' !== $version ) {
+                // Verify it's actually a plugin file by also checking for Plugin Name.
+                $content = file_get_contents( $file, false, null, 0, 8192 );
+                if ( false !== stripos( $content, 'Plugin Name' ) ) {
+                    return $version;
+                }
+            }
+        }
+
+        return '';
+    }
+
+    /**
+     * Extract a specific header value from a file.
+     *
+     * @param string $file   File path.
+     * @param string $header Header name (e.g. 'Version').
+     * @return string Header value or empty string.
+     */
+    private function extract_header_version( $file, $header ) {
+        $content = file_get_contents( $file, false, null, 0, 8192 );
+        if ( false === $content ) {
+            return '';
+        }
+
+        $pattern = '/^[\s*]*' . preg_quote( $header, '/' ) . '\s*:\s*(.+)$/mi';
+        if ( preg_match( $pattern, $content, $matches ) ) {
+            return trim( $matches[1] );
+        }
+
+        return '';
+    }
+
+    /**
      * Format bytes to human readable string.
      *
      * @param int $bytes    Size in bytes.

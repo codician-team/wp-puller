@@ -11,6 +11,7 @@
     var WPPuller = {
         init: function() {
             this.bindEvents();
+            this.restoreLastTab();
         },
 
         /**
@@ -62,13 +63,31 @@
             var $btn = $(e.currentTarget);
             var tab = $btn.data('tab');
 
+            this.activateTab(tab);
+        },
+
+        activateTab: function(tab) {
             // Update tab buttons
             $('.wp-puller-tab').removeClass('wp-puller-tab-active');
-            $btn.addClass('wp-puller-tab-active');
+            $('.wp-puller-tab[data-tab="' + tab + '"]').addClass('wp-puller-tab-active');
 
             // Update tab content
             $('.wp-puller-tab-content').removeClass('wp-puller-tab-content-active');
             $('#wp-puller-tab-' + tab).addClass('wp-puller-tab-content-active');
+
+            // Remember the last active tab
+            try {
+                localStorage.setItem('wp_puller_active_tab', tab);
+            } catch (ex) {}
+        },
+
+        restoreLastTab: function() {
+            try {
+                var savedTab = localStorage.getItem('wp_puller_active_tab');
+                if (savedTab && $('#wp-puller-tab-' + savedTab).length) {
+                    this.activateTab(savedTab);
+                }
+            } catch (ex) {}
         },
 
         // --- Settings ---
