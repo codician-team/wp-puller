@@ -87,6 +87,7 @@ class WP_Puller_Admin {
         add_action( 'wp_ajax_wp_puller_deploy_branch', array( $this, 'ajax_deploy_branch' ) );
         add_action( 'wp_ajax_wp_puller_get_branches_with_info', array( $this, 'ajax_get_branches_with_info' ) );
         add_action( 'wp_ajax_wp_puller_compare_branches', array( $this, 'ajax_compare_branches' ) );
+        add_action( 'wp_ajax_wp_puller_save_active_tab', array( $this, 'ajax_save_active_tab' ) );
     }
 
     /**
@@ -130,9 +131,10 @@ class WP_Puller_Admin {
         );
 
         wp_localize_script( 'wp-puller-admin', 'wpPuller', array(
-            'ajaxUrl'  => admin_url( 'admin-ajax.php' ),
-            'nonce'    => wp_create_nonce( 'wp_puller_nonce' ),
-            'strings'  => array(
+            'ajaxUrl'   => admin_url( 'admin-ajax.php' ),
+            'nonce'     => wp_create_nonce( 'wp_puller_nonce' ),
+            'activeTab' => get_user_meta( get_current_user_id(), 'wp_puller_active_tab', true ),
+            'strings'   => array(
                 'saving'           => __( 'Saving...', 'wp-puller' ),
                 'saved'            => __( 'Settings saved!', 'wp-puller' ),
                 'testing'          => __( 'Testing connection...', 'wp-puller' ),
@@ -619,6 +621,23 @@ class WP_Puller_Admin {
         }
 
         wp_send_json_success( $comparison );
+    }
+
+    /**
+     * AJAX: Save the active tab for the current user.
+     */
+    public function ajax_save_active_tab() {
+        $this->verify_ajax_request();
+
+        $tab = isset( $_POST['tab'] ) ? sanitize_text_field( wp_unslash( $_POST['tab'] ) ) : '';
+
+        if ( ! in_array( $tab, array( 'theme', 'plugin' ), true ) ) {
+            wp_send_json_error();
+        }
+
+        update_user_meta( get_current_user_id(), 'wp_puller_active_tab', $tab );
+
+        wp_send_json_success();
     }
 
     /**

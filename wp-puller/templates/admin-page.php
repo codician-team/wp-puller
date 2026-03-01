@@ -21,6 +21,10 @@ $logs           = $data['logs'];
 $backup_class   = $data['backup_class'];
 $masked_pat     = WP_Puller_Admin::get_masked_pat();
 $pat_status     = WP_Puller_Admin::get_pat_status();
+$active_tab     = get_user_meta( get_current_user_id(), 'wp_puller_active_tab', true );
+if ( ! in_array( $active_tab, array( 'theme', 'plugin' ), true ) ) {
+    $active_tab = 'theme';
+}
 ?>
 <div class="wrap wp-puller-wrap">
     <h1 class="wp-puller-title">
@@ -33,18 +37,18 @@ $pat_status     = WP_Puller_Admin::get_pat_status();
 
     <!-- Tab Navigation -->
     <div class="wp-puller-tabs">
-        <button type="button" class="wp-puller-tab wp-puller-tab-active" data-tab="theme">
+        <button type="button" class="wp-puller-tab<?php echo 'theme' === $active_tab ? ' wp-puller-tab-active' : ''; ?>" data-tab="theme">
             <span class="dashicons dashicons-admin-appearance"></span>
             <?php esc_html_e( 'Theme', 'wp-puller' ); ?>
         </button>
-        <button type="button" class="wp-puller-tab" data-tab="plugin">
+        <button type="button" class="wp-puller-tab<?php echo 'plugin' === $active_tab ? ' wp-puller-tab-active' : ''; ?>" data-tab="plugin">
             <span class="dashicons dashicons-admin-plugins"></span>
             <?php esc_html_e( 'Plugin', 'wp-puller' ); ?>
         </button>
     </div>
 
     <!-- ============ THEME TAB ============ -->
-    <div class="wp-puller-tab-content wp-puller-tab-content-active" id="wp-puller-tab-theme" data-asset-type="theme">
+    <div class="wp-puller-tab-content<?php echo 'theme' === $active_tab ? ' wp-puller-tab-content-active' : ''; ?>" id="wp-puller-tab-theme" data-asset-type="theme">
         <div class="wp-puller-grid">
             <!-- Theme Status Card -->
             <div class="wp-puller-card wp-puller-card-status">
@@ -292,7 +296,7 @@ $pat_status     = WP_Puller_Admin::get_pat_status();
     </div>
 
     <!-- ============ PLUGIN TAB ============ -->
-    <div class="wp-puller-tab-content" id="wp-puller-tab-plugin" data-asset-type="plugin">
+    <div class="wp-puller-tab-content<?php echo 'plugin' === $active_tab ? ' wp-puller-tab-content-active' : ''; ?>" id="wp-puller-tab-plugin" data-asset-type="plugin">
         <div class="wp-puller-grid">
             <!-- Plugin Status Card -->
             <div class="wp-puller-card wp-puller-card-status">

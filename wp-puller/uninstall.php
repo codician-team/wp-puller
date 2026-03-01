@@ -46,3 +46,6 @@ $wpdb->query(
         '_transient_timeout_wp_puller_cache_%'
     )
 );
+
+// Clean up user meta.
+delete_metadata( 'user', 0, 'wp_puller_active_tab', '', true );
