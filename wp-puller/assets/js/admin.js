@@ -202,6 +202,9 @@
             case 'backups':
                 populateBackupsPanel(assetId, asset, $panel);
                 break;
+            case 'webhook':
+                // Webhook panel just shows the global URL/secret, no extra population needed
+                break;
         }
 
         // Slide down
@@ -481,6 +484,32 @@
      * @param {Object} data      { branches, configured, deployed_branch }
      * @param {string} assetId
      */
+    /**
+     * Format a relative time string from an ISO date or timestamp.
+     *
+     * @param {string|number} dateInput  ISO date string or unix timestamp.
+     * @return {string}
+     */
+    function timeAgo(dateInput) {
+        if (!dateInput) {
+            return '';
+        }
+        var now = Date.now();
+        var then = (typeof dateInput === 'number') ? dateInput * 1000 : new Date(dateInput).getTime();
+        var seconds = Math.floor((now - then) / 1000);
+
+        if (seconds < 60) { return 'just now'; }
+        var minutes = Math.floor(seconds / 60);
+        if (minutes < 60) { return minutes + 'm ago'; }
+        var hours = Math.floor(minutes / 60);
+        if (hours < 24) { return hours + 'h ago'; }
+        var days = Math.floor(hours / 24);
+        if (days < 30) { return days + 'd ago'; }
+        var months = Math.floor(days / 30);
+        if (months < 12) { return months + 'mo ago'; }
+        return Math.floor(months / 12) + 'y ago';
+    }
+
     function renderBranchList($container, data, assetId) {
         var branches = data.branches;
         var configured = data.configured;
@@ -495,7 +524,7 @@
         html += '<thead><tr>';
         html += '<th>Branch</th>';
         html += '<th>Last Commit</th>';
-        html += '<th>Author</th>';
+        html += '<th>Updated</th>';
         html += '<th>Actions</th>';
         html += '</tr></thead>';
         html += '<tbody>';
@@ -513,9 +542,9 @@
 
             // Branch name column
             html += '<td>';
-            html += escapeHtml(b.name);
+            html += '<strong>' + escapeHtml(b.name) + '</strong>';
             if (isConfigured) {
-                html += ' <span class="wp-puller-badge">configured</span>';
+                html += ' <span class="wp-puller-badge wp-puller-badge-success">updates</span>';
             }
             if (isDeployed) {
                 html += ' <span class="wp-puller-badge">deployed</span>';
@@ -525,16 +554,20 @@
             // Last commit column
             html += '<td>';
             html += '<code>' + escapeHtml(b.short_sha || '') + '</code> ';
-            html += escapeHtml((b.message || '').split('\n')[0].substring(0, 60));
+            html += escapeHtml((b.message || '').split('\n')[0].substring(0, 50));
+            html += '<br><span class="wp-puller-branch-author">' + escapeHtml(b.author || '') + '</span>';
             html += '</td>';
 
-            // Author column
-            html += '<td>' + escapeHtml(b.author || '') + '</td>';
+            // Updated column (relative time)
+            html += '<td class="wp-puller-branch-time">' + escapeHtml(timeAgo(b.date || b.timestamp)) + '</td>';
 
             // Actions column
-            html += '<td>';
-            html += '<button class="button button-small wp-puller-deploy-branch" data-branch="' + escapeHtml(b.name) + '">Deploy</button> ';
-            html += '<button class="button button-small wp-puller-compare-branch" data-branch="' + escapeHtml(b.name) + '" data-base="' + escapeHtml(configured || 'main') + '">Compare</button>';
+            html += '<td class="wp-puller-branch-actions">';
+            html += '<button class="button button-small wp-puller-deploy-branch" data-branch="' + escapeHtml(b.name) + '" title="Deploy this branch">Deploy</button> ';
+            if (!isConfigured) {
+                html += '<button class="button button-small wp-puller-set-updates-branch" data-branch="' + escapeHtml(b.name) + '" title="Set as updates branch">Use for Updates</button> ';
+            }
+            html += '<button class="button button-small wp-puller-compare-branch" data-branch="' + escapeHtml(b.name) + '" data-base="' + escapeHtml(configured || 'main') + '" title="Compare with updates branch">Compare</button>';
             html += '</td>';
 
             html += '</tr>';
@@ -1040,6 +1073,46 @@
                         setTimeout(function() {
                             location.reload();
                         }, 1500);
+                    } else {
+                        showNotice(response.data.message || wpPuller.strings.error, 'error');
+                    }
+                }).always(function() {
+                    setLoading($btn, false);
+                });
+            });
+        });
+
+        // -----------------------------------------------------------------
+        // Branch Testing: Set as Updates Branch
+        // -----------------------------------------------------------------
+
+        $(document).on('click', '.wp-puller-set-updates-branch', function(e) {
+            e.preventDefault();
+            var $btn = $(this);
+            var branch = $btn.data('branch');
+            var $panel = $btn.closest('.wp-puller-panel');
+            var assetId = $panel.attr('data-asset-id');
+
+            if (!assetId || !branch) {
+                showNotice('Unable to determine asset or branch.', 'error');
+                return;
+            }
+
+            showModal('Set Updates Branch', wpPuller.strings.confirmSetBranch, function() {
+                setLoading($btn, true);
+
+                doAjax('wp_puller_set_updates_branch', {
+                    asset_id: assetId,
+                    branch: branch
+                }).done(function(response) {
+                    if (response.success) {
+                        showNotice(response.data.message, 'success');
+
+                        // Update local data
+                        wpPuller.assets[assetId].branch = branch;
+
+                        // Re-render branch list with updated configured branch
+                        fetchBranches(assetId, $panel);
                     } else {
                         showNotice(response.data.message || wpPuller.strings.error, 'error');
                     }

@@ -148,6 +148,9 @@ $backup_class = $data['backup_class'];
                                 <span class="wp-puller-icon-badge"><?php echo count( $backups ); ?></span>
                             <?php endif; ?>
                         </button>
+                        <button type="button" class="wp-puller-icon-btn wp-puller-open-panel" data-panel="webhook" data-asset-id="<?php echo esc_attr( $asset_id ); ?>" title="<?php esc_attr_e( 'Webhook', 'wp-puller' ); ?>">
+                            <span class="dashicons dashicons-admin-links"></span>
+                        </button>
                     </div>
                 </div>
             <?php endforeach; ?>
@@ -318,7 +321,7 @@ $backup_class = $data['backup_class'];
             <div class="wp-puller-card-header">
                 <h2>
                     <span class="dashicons dashicons-randomize"></span>
-                    <?php esc_html_e( 'Branch Testing', 'wp-puller' ); ?>
+                    <?php esc_html_e( 'Branches', 'wp-puller' ); ?>
                     <span class="wp-puller-panel-asset-label"></span>
                 </h2>
                 <div class="wp-puller-card-header-actions">
@@ -333,7 +336,7 @@ $backup_class = $data['backup_class'];
             </div>
             <div class="wp-puller-card-body">
                 <p class="description" style="margin: 0 0 12px;">
-                    <?php esc_html_e( 'Deploy any branch to test. A backup is created automatically before switching.', 'wp-puller' ); ?>
+                    <?php esc_html_e( 'Recent branches sorted by latest activity. Deploy any branch or set one as your updates branch.', 'wp-puller' ); ?>
                 </p>
                 <div class="wp-puller-branch-list">
                     <p class="wp-puller-empty"><?php esc_html_e( 'Click "Refresh" to load branches.', 'wp-puller' ); ?></p>
@@ -412,19 +415,22 @@ $backup_class = $data['backup_class'];
         </div>
     </div>
 
-    <!-- ============ SHARED SECTIONS ============ -->
-    <div class="wp-puller-shared-section">
-        <!-- Webhook Setup Card -->
-        <div class="wp-puller-card wp-puller-card-full wp-puller-card-webhook">
+    <!-- ============ WEBHOOK PANEL (per-asset) ============ -->
+    <div class="wp-puller-panel wp-puller-panel-webhook" id="wp-puller-panel-webhook" data-asset-id="" style="display: none;">
+        <div class="wp-puller-card wp-puller-card-full">
             <div class="wp-puller-card-header">
                 <h2>
                     <span class="dashicons dashicons-admin-links"></span>
                     <?php esc_html_e( 'Webhook Setup', 'wp-puller' ); ?>
+                    <span class="wp-puller-panel-asset-label"></span>
                 </h2>
+                <button type="button" class="button button-small wp-puller-close-panel" title="<?php esc_attr_e( 'Close', 'wp-puller' ); ?>">
+                    <span class="dashicons dashicons-no-alt"></span>
+                </button>
             </div>
             <div class="wp-puller-card-body">
-                <p class="wp-puller-webhook-intro">
-                    <?php esc_html_e( 'Configure a GitHub webhook to receive instant updates when you push to your repository.', 'wp-puller' ); ?>
+                <p class="description" style="margin: 0 0 12px;">
+                    <?php esc_html_e( 'Configure a GitHub webhook for this repository to receive instant updates on push.', 'wp-puller' ); ?>
                 </p>
 
                 <div class="wp-puller-webhook-field">
@@ -465,7 +471,10 @@ $backup_class = $data['backup_class'];
                 </details>
             </div>
         </div>
+    </div>
 
+    <!-- ============ SHARED SECTIONS ============ -->
+    <div class="wp-puller-shared-section">
         <!-- Activity Log Card -->
         <div class="wp-puller-card wp-puller-card-full wp-puller-card-logs">
             <div class="wp-puller-card-header">
@@ -484,12 +493,28 @@ $backup_class = $data['backup_class'];
                     <p class="wp-puller-empty"><?php esc_html_e( 'No activity recorded yet.', 'wp-puller' ); ?></p>
                 <?php else : ?>
                     <ul class="wp-puller-log-list" id="wp-puller-log-list">
-                        <?php foreach ( $logs as $log ) : ?>
+                        <?php foreach ( $logs as $log ) :
+                            $meta       = isset( $log['meta'] ) ? $log['meta'] : array();
+                            $asset_name = '';
+                            if ( ! empty( $meta['asset_label'] ) ) {
+                                $asset_name = $meta['asset_label'];
+                            } elseif ( ! empty( $meta['asset_slug'] ) ) {
+                                $asset_name = $meta['asset_slug'];
+                            }
+                            $version = ! empty( $meta['version'] ) ? $meta['version'] : '';
+                        ?>
                             <li class="wp-puller-log-item wp-puller-log-<?php echo esc_attr( $log['status'] ); ?>">
                                 <span class="wp-puller-log-indicator"></span>
                                 <div class="wp-puller-log-content">
                                     <span class="wp-puller-log-message"><?php echo esc_html( $log['message'] ); ?></span>
                                     <span class="wp-puller-log-meta">
+                                        <?php if ( ! empty( $asset_name ) ) : ?>
+                                            <strong><?php echo esc_html( $asset_name ); ?></strong>
+                                            <?php if ( ! empty( $version ) ) : ?>
+                                                <span class="wp-puller-log-version">v<?php echo esc_html( $version ); ?></span>
+                                            <?php endif; ?>
+                                            &middot;
+                                        <?php endif; ?>
                                         <?php
                                         /* translators: %s: human-readable time difference */
                                         printf( esc_html__( '%s ago', 'wp-puller' ), esc_html( human_time_diff( $log['timestamp'], time() ) ) );

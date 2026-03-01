@@ -109,25 +109,40 @@ class WP_Puller_Asset_Updater {
         $latest_commit = $this->github_api->get_latest_commit( $parsed['owner'], $parsed['repo'], $branch );
 
         if ( is_wp_error( $latest_commit ) ) {
-            $this->logger->log_update_error( $latest_commit->get_error_message(), $source );
+            $this->logger->log_update_error( $latest_commit->get_error_message(), $source, array(
+                'asset_type'  => $type,
+                'asset_slug'  => $slug,
+                'asset_label' => ! empty( $this->config['label'] ) ? $this->config['label'] : $slug,
+            ) );
             return $latest_commit;
         }
 
         $backup_path = $this->create_backup();
 
         if ( is_wp_error( $backup_path ) ) {
-            $this->logger->log_update_error( $backup_path->get_error_message(), $source );
+            $this->logger->log_update_error( $backup_path->get_error_message(), $source, array(
+                'asset_type'  => $type,
+                'asset_slug'  => $slug,
+                'asset_label' => ! empty( $this->config['label'] ) ? $this->config['label'] : $slug,
+            ) );
             return $backup_path;
         }
 
+        $asset_label = ! empty( $this->config['label'] ) ? $this->config['label'] : $slug;
+        $log_meta    = array(
+            'asset_type'  => $type,
+            'asset_slug'  => $slug,
+            'asset_label' => $asset_label,
+        );
+
         if ( $backup_path ) {
-            $this->logger->log_backup_created( $backup_path );
+            $this->logger->log_backup_created( $backup_path, $log_meta );
         }
 
         $zip_file = $this->github_api->download_archive( $parsed['owner'], $parsed['repo'], $branch );
 
         if ( is_wp_error( $zip_file ) ) {
-            $this->logger->log_update_error( $zip_file->get_error_message(), $source );
+            $this->logger->log_update_error( $zip_file->get_error_message(), $source, $log_meta );
             return $zip_file;
         }
 
@@ -136,7 +151,7 @@ class WP_Puller_Asset_Updater {
         @unlink( $zip_file );
 
         if ( is_wp_error( $result ) ) {
-            $this->logger->log_update_error( $result->get_error_message(), $source );
+            $this->logger->log_update_error( $result->get_error_message(), $source, $log_meta );
             return $result;
         }
 
@@ -145,12 +160,10 @@ class WP_Puller_Asset_Updater {
             'last_check'    => time(),
         ) );
 
-        $this->logger->log_update_success( $latest_commit['short_sha'], $source, array(
+        $this->logger->log_update_success( $latest_commit['short_sha'], $source, array_merge( $log_meta, array(
             'commit_sha'     => $latest_commit['sha'],
             'commit_message' => substr( $latest_commit['message'], 0, 100 ),
-            'asset_type'     => $type,
-            'asset_slug'     => $slug,
-        ) );
+        ) ) );
 
         $action = ( 'theme' === $type ) ? 'wp_puller_theme_updated' : 'wp_puller_plugin_updated';
         do_action( $action, $latest_commit, $source, $slug );
@@ -213,14 +226,21 @@ class WP_Puller_Asset_Updater {
             return $backup_path;
         }
 
+        $asset_label = ! empty( $this->config['label'] ) ? $this->config['label'] : $slug;
+        $log_meta    = array(
+            'asset_type'  => $type,
+            'asset_slug'  => $slug,
+            'asset_label' => $asset_label,
+        );
+
         if ( $backup_path ) {
-            $this->logger->log_backup_created( $backup_path );
+            $this->logger->log_backup_created( $backup_path, $log_meta );
         }
 
         $zip_file = $this->github_api->download_archive( $parsed['owner'], $parsed['repo'], $branch );
 
         if ( is_wp_error( $zip_file ) ) {
-            $this->logger->log_update_error( $zip_file->get_error_message(), $source );
+            $this->logger->log_update_error( $zip_file->get_error_message(), $source, $log_meta );
             return $zip_file;
         }
 
@@ -229,7 +249,7 @@ class WP_Puller_Asset_Updater {
         @unlink( $zip_file );
 
         if ( is_wp_error( $result ) ) {
-            $this->logger->log_update_error( $result->get_error_message(), $source );
+            $this->logger->log_update_error( $result->get_error_message(), $source, $log_meta );
             return $result;
         }
 
@@ -240,13 +260,11 @@ class WP_Puller_Asset_Updater {
             'deployed_commit'  => $latest_commit['sha'],
         ) );
 
-        $this->logger->log_update_success( $latest_commit['short_sha'], $source, array(
+        $this->logger->log_update_success( $latest_commit['short_sha'], $source, array_merge( $log_meta, array(
             'commit_sha'     => $latest_commit['sha'],
             'commit_message' => substr( $latest_commit['message'], 0, 100 ),
             'branch'         => $branch,
-            'asset_type'     => $type,
-            'asset_slug'     => $slug,
-        ) );
+        ) ) );
 
         $action = ( 'theme' === $type ) ? 'wp_puller_theme_updated' : 'wp_puller_plugin_updated';
         do_action( $action, $latest_commit, $source, $slug );

@@ -62,6 +62,9 @@ class WP_Puller_Admin {
         add_action( 'wp_ajax_wp_puller_restore_backup', array( $this, 'ajax_restore_backup' ) );
         add_action( 'wp_ajax_wp_puller_delete_backup', array( $this, 'ajax_delete_backup' ) );
 
+        // Branch configuration.
+        add_action( 'wp_ajax_wp_puller_set_updates_branch', array( $this, 'ajax_set_updates_branch' ) );
+
         // Shared.
         add_action( 'wp_ajax_wp_puller_test_connection', array( $this, 'ajax_test_connection' ) );
         add_action( 'wp_ajax_wp_puller_regenerate_secret', array( $this, 'ajax_regenerate_secret' ) );
@@ -165,6 +168,7 @@ class WP_Puller_Admin {
                 'deleted'             => __( 'Backup deleted.', 'wp-puller' ),
                 'regenerated'         => __( 'Webhook secret regenerated. Update your GitHub webhook settings.', 'wp-puller' ),
                 'noChanges'           => __( 'No changes between these branches.', 'wp-puller' ),
+                'confirmSetBranch'    => __( 'Set this as the updates branch? Future updates and webhooks will track this branch.', 'wp-puller' ),
             ),
         ) );
     }
@@ -586,6 +590,38 @@ class WP_Puller_Admin {
         wp_send_json_success( $comparison );
     }
 
+    /**
+     * Set the updates branch for an asset.
+     */
+    public function ajax_set_updates_branch() {
+        $this->verify_ajax();
+
+        $asset_id = sanitize_text_field( wp_unslash( $_POST['asset_id'] ?? '' ) );
+        $branch   = sanitize_text_field( wp_unslash( $_POST['branch'] ?? '' ) );
+
+        $assets = WP_Puller::get_assets();
+
+        if ( ! isset( $assets[ $asset_id ] ) ) {
+            wp_send_json_error( array( 'message' => __( 'Asset not found.', 'wp-puller' ) ) );
+        }
+
+        if ( empty( $branch ) ) {
+            wp_send_json_error( array( 'message' => __( 'No branch specified.', 'wp-puller' ) ) );
+        }
+
+        $assets[ $asset_id ]['branch'] = $branch;
+        update_option( 'wp_puller_assets', $assets );
+
+        wp_send_json_success( array(
+            'message' => sprintf(
+                /* translators: %s: branch name */
+                __( 'Updates branch set to "%s".', 'wp-puller' ),
+                $branch
+            ),
+            'branch' => $branch,
+        ) );
+    }
+
     // =========================================================================
     // AJAX: Backups
     // =========================================================================
@@ -616,7 +652,11 @@ class WP_Puller_Admin {
             wp_send_json_error( array( 'message' => $result->get_error_message() ) );
         }
 
-        $this->logger->log_restore_success( $backup_name );
+        $this->logger->log_restore_success( $backup_name, array(
+            'asset_type'  => $config['type'],
+            'asset_slug'  => $config['slug'],
+            'asset_label' => ! empty( $config['label'] ) ? $config['label'] : $config['slug'],
+        ) );
 
         wp_send_json_success( array( 'message' => __( 'Backup restored successfully.', 'wp-puller' ) ) );
     }
