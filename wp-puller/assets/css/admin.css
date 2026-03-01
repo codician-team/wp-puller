@@ -94,16 +94,19 @@
     background: #f0f6fc;
 }
 
+.wp-puller-notice.notice-success,
 .wp-puller-notice-success {
     border-color: #00a32a;
     background: #d4edda;
 }
 
+.wp-puller-notice.notice-error,
 .wp-puller-notice-error {
     border-color: #d63638;
     background: #fce4e4;
 }
 
+.wp-puller-notice.notice-warning,
 .wp-puller-notice-warning {
     border-color: #dba617;
     background: #fff3cd;
@@ -898,16 +901,6 @@
     100% {
         transform: rotate(360deg);
     }
-}
-
-.wp-puller-notice-info {
-    border-color: #2271b1;
-    background: #e8f0fe;
-}
-
-.wp-puller-notice-warning {
-    border-color: #dba617;
-    background: #fff3cd;
 }
 
 /* ==========================================================================
