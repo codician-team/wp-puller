@@ -44,6 +44,22 @@ class WP_Puller_GitHub_API {
     const CACHE_DURATION = 300;
 
     /**
+     * Optional PAT for per-asset authentication.
+     *
+     * @var string|null
+     */
+    private $pat = null;
+
+    /**
+     * Constructor.
+     *
+     * @param string|null $pat Optional Personal Access Token for this API instance.
+     */
+    public function __construct( $pat = null ) {
+        $this->pat = $pat;
+    }
+
+    /**
      * Parse a GitHub repository URL.
      *
      * Supports formats:
@@ -417,18 +433,18 @@ class WP_Puller_GitHub_API {
     }
 
     /**
-     * Get the stored Personal Access Token.
+     * Get the Personal Access Token.
+     *
+     * Returns the PAT passed to the constructor if set, otherwise empty string.
      *
      * @return string
      */
     private function get_pat() {
-        $encrypted = get_option( 'wp_puller_pat', '' );
-
-        if ( empty( $encrypted ) ) {
-            return '';
+        if ( null !== $this->pat ) {
+            return $this->pat;
         }
 
-        return WP_Puller::decrypt( $encrypted );
+        return '';
     }
 
     /**
