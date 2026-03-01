@@ -23,6 +23,10 @@ $options = array(
     'wp_puller_auto_update',
     'wp_puller_update_log',
     'wp_puller_backup_count',
+    'wp_puller_asset_type',
+    'wp_puller_plugin_slug',
+    'wp_puller_deployed_branch',
+    'wp_puller_deployed_commit',
 );
 
 foreach ( $options as $option ) {

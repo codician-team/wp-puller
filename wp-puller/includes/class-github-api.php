@@ -156,34 +156,48 @@ class WP_Puller_GitHub_API {
     }
 
     /**
-     * Get list of branches.
+     * Get raw file content from a repository.
      *
-     * @param string $owner Repository owner.
-     * @param string $repo  Repository name.
-     * @return array|WP_Error
+     * @param string $owner  Repository owner.
+     * @param string $repo   Repository name.
+     * @param string $branch Branch name.
+     * @param string $path   File path within the repository.
+     * @return string|WP_Error File content or error.
      */
-    public function get_branches( $owner, $repo ) {
-        $cache_key = self::CACHE_PREFIX . 'branches_' . md5( $owner . $repo );
-        $cached    = get_transient( $cache_key );
+    public function get_raw_file( $owner, $repo, $branch, $path ) {
+        $url = sprintf(
+            '%s/%s/%s/%s/%s',
+            self::RAW_BASE,
+            rawurlencode( $owner ),
+            rawurlencode( $repo ),
+            rawurlencode( $branch ),
+            $path
+        );
 
-        if ( false !== $cached ) {
-            return $cached;
+        $args = array(
+            'timeout'   => 15,
+            'sslverify' => true,
+            'headers'   => array(
+                'User-Agent' => 'WP-Puller/' . WP_PULLER_VERSION,
+            ),
+        );
+
+        $auth_header = $this->get_auth_header();
+        if ( ! empty( $auth_header ) ) {
+            $args['headers']['Authorization'] = $auth_header;
         }
 
-        $response = $this->api_request( "/repos/{$owner}/{$repo}/branches" );
+        $response = wp_remote_get( $url, $args );
 
         if ( is_wp_error( $response ) ) {
             return $response;
         }
 
-        $branches = array();
-        foreach ( $response as $branch ) {
-            $branches[] = $branch['name'];
+        if ( 200 !== wp_remote_retrieve_response_code( $response ) ) {
+            return new WP_Error( 'file_not_found', 'Could not fetch file from repository.' );
         }
 
-        set_transient( $cache_key, $branches, self::CACHE_DURATION );
-
-        return $branches;
+        return wp_remote_retrieve_body( $response );
     }
 
     /**
@@ -434,6 +448,306 @@ class WP_Puller_GitHub_API {
 
         // Use Bearer for all token types - GitHub API accepts it universally
         return 'Bearer ' . $pat;
+    }
+
+    /**
+     * Make a GraphQL request to GitHub.
+     *
+     * @param string $query     GraphQL query string.
+     * @param array  $variables Query variables.
+     * @return array|WP_Error
+     */
+    private function graphql_request( $query, $variables = array() ) {
+        $auth_header = $this->get_auth_header();
+
+        if ( empty( $auth_header ) ) {
+            return new WP_Error( 'no_auth', 'GraphQL requires authentication.' );
+        }
+
+        $body = array( 'query' => $query );
+        if ( ! empty( $variables ) ) {
+            $body['variables'] = $variables;
+        }
+
+        $response = wp_remote_post( self::API_BASE . '/graphql', array(
+            'timeout'   => 30,
+            'sslverify' => true,
+            'headers'   => array(
+                'Authorization' => $auth_header,
+                'Content-Type'  => 'application/json',
+                'User-Agent'    => 'WP-Puller/' . WP_PULLER_VERSION,
+            ),
+            'body'      => wp_json_encode( $body ),
+        ) );
+
+        if ( is_wp_error( $response ) ) {
+            return $response;
+        }
+
+        $status_code = wp_remote_retrieve_response_code( $response );
+        $data        = json_decode( wp_remote_retrieve_body( $response ), true );
+
+        if ( 200 !== $status_code ) {
+            $message = isset( $data['message'] ) ? $data['message'] : 'GraphQL error';
+            return new WP_Error( 'graphql_error', $message );
+        }
+
+        if ( ! empty( $data['errors'] ) ) {
+            return new WP_Error( 'graphql_error', $data['errors'][0]['message'] );
+        }
+
+        return $data;
+    }
+
+    /**
+     * Get the most recently updated branches with commit info.
+     *
+     * Uses GraphQL when authenticated (single API call) with REST fallback.
+     *
+     * @param string $owner Repository owner.
+     * @param string $repo  Repository name.
+     * @param int    $limit Maximum number of branches to return.
+     * @return array|WP_Error Array of branch data with commit info.
+     */
+    public function get_branches_with_info( $owner, $repo, $limit = 10 ) {
+        $cache_key = self::CACHE_PREFIX . 'branches_info_' . md5( $owner . $repo . $limit );
+        $cached    = get_transient( $cache_key );
+
+        if ( false !== $cached ) {
+            return $cached;
+        }
+
+        // Try GraphQL first (single API call, returns branches with commit dates)
+        $branches = $this->get_branches_graphql( $owner, $repo, $limit );
+
+        // Fall back to REST API if GraphQL fails (e.g. no PAT for public repo)
+        if ( is_wp_error( $branches ) ) {
+            $branches = $this->get_branches_rest( $owner, $repo, $limit );
+        }
+
+        if ( is_wp_error( $branches ) ) {
+            return $branches;
+        }
+
+        set_transient( $cache_key, $branches, self::CACHE_DURATION * 2 );
+
+        return $branches;
+    }
+
+    /**
+     * Fetch branches with commit info via GraphQL (single API call).
+     *
+     * @param string $owner Repository owner.
+     * @param string $repo  Repository name.
+     * @param int    $limit Maximum number of branches to return.
+     * @return array|WP_Error
+     */
+    private function get_branches_graphql( $owner, $repo, $limit ) {
+        $query = '
+            query($owner: String!, $repo: String!, $count: Int!) {
+                repository(owner: $owner, name: $repo) {
+                    refs(refPrefix: "refs/heads/", first: $count, orderBy: {field: TAG_COMMIT_DATE, direction: DESC}) {
+                        nodes {
+                            name
+                            target {
+                                ... on Commit {
+                                    oid
+                                    messageHeadline
+                                    author {
+                                        name
+                                        date
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        ';
+
+        $result = $this->graphql_request( $query, array(
+            'owner' => $owner,
+            'repo'  => $repo,
+            'count' => $limit,
+        ) );
+
+        if ( is_wp_error( $result ) ) {
+            return $result;
+        }
+
+        $nodes = isset( $result['data']['repository']['refs']['nodes'] )
+            ? $result['data']['repository']['refs']['nodes']
+            : null;
+
+        if ( ! is_array( $nodes ) ) {
+            return new WP_Error( 'graphql_parse', 'Unexpected GraphQL response structure.' );
+        }
+
+        $branches = array();
+        foreach ( $nodes as $node ) {
+            $target = isset( $node['target'] ) ? $node['target'] : array();
+            $sha    = isset( $target['oid'] ) ? $target['oid'] : '';
+            $date   = isset( $target['author']['date'] ) ? $target['author']['date'] : '';
+
+            $branches[] = array(
+                'name'      => $node['name'],
+                'sha'       => $sha,
+                'short_sha' => $sha ? substr( $sha, 0, 7 ) : '',
+                'message'   => isset( $target['messageHeadline'] ) ? substr( $target['messageHeadline'], 0, 80 ) : '',
+                'author'    => isset( $target['author']['name'] ) ? $target['author']['name'] : '',
+                'date'      => $date,
+                'timestamp' => ! empty( $date ) ? strtotime( $date ) : 0,
+            );
+        }
+
+        return $branches;
+    }
+
+    /**
+     * Fetch branches with commit info via REST API (N+1 calls, fallback).
+     *
+     * @param string $owner Repository owner.
+     * @param string $repo  Repository name.
+     * @param int    $limit Maximum number of branches to return.
+     * @return array|WP_Error
+     */
+    private function get_branches_rest( $owner, $repo, $limit ) {
+        $fetch_count = min( $limit * 3, 100 );
+        $response    = $this->api_request( "/repos/{$owner}/{$repo}/branches?per_page={$fetch_count}" );
+
+        if ( is_wp_error( $response ) ) {
+            return $response;
+        }
+
+        $branches = array();
+        foreach ( $response as $branch ) {
+            $sha  = isset( $branch['commit']['sha'] ) ? $branch['commit']['sha'] : '';
+            $data = array(
+                'name'      => $branch['name'],
+                'sha'       => $sha,
+                'short_sha' => $sha ? substr( $sha, 0, 7 ) : '',
+                'message'   => '',
+                'author'    => '',
+                'date'      => '',
+                'timestamp' => 0,
+            );
+
+            $commit = $this->get_latest_commit( $owner, $repo, $branch['name'] );
+            if ( ! is_wp_error( $commit ) ) {
+                $data['message']   = isset( $commit['message'] ) ? substr( $commit['message'], 0, 80 ) : '';
+                $data['author']    = isset( $commit['author'] ) ? $commit['author'] : '';
+                $data['date']      = isset( $commit['date'] ) ? $commit['date'] : '';
+                $data['timestamp'] = ! empty( $commit['date'] ) ? strtotime( $commit['date'] ) : 0;
+            }
+
+            $branches[] = $data;
+        }
+
+        usort( $branches, function( $a, $b ) {
+            return $b['timestamp'] - $a['timestamp'];
+        } );
+
+        return array_slice( $branches, 0, $limit );
+    }
+
+    /**
+     * Compare two refs (branches, tags, or commits).
+     *
+     * @param string $owner Repository owner.
+     * @param string $repo  Repository name.
+     * @param string $base  Base ref.
+     * @param string $head  Head ref.
+     * @return array|WP_Error Comparison data.
+     */
+    public function compare_commits( $owner, $repo, $base, $head ) {
+        $cache_key = self::CACHE_PREFIX . 'compare_' . md5( $owner . $repo . $base . $head );
+        $cached    = get_transient( $cache_key );
+
+        if ( false !== $cached ) {
+            return $cached;
+        }
+
+        $response = $this->api_request(
+            sprintf( '/repos/%s/%s/compare/%s...%s', $owner, $repo, $base, $head )
+        );
+
+        if ( is_wp_error( $response ) ) {
+            return $response;
+        }
+
+        $commits = array();
+        if ( isset( $response['commits'] ) ) {
+            foreach ( $response['commits'] as $commit ) {
+                $commits[] = array(
+                    'sha'       => $commit['sha'],
+                    'short_sha' => substr( $commit['sha'], 0, 7 ),
+                    'message'   => isset( $commit['commit']['message'] ) ? $commit['commit']['message'] : '',
+                    'author'    => isset( $commit['commit']['author']['name'] ) ? $commit['commit']['author']['name'] : '',
+                    'date'      => isset( $commit['commit']['author']['date'] ) ? $commit['commit']['author']['date'] : '',
+                );
+            }
+        }
+
+        $files = array();
+        if ( isset( $response['files'] ) ) {
+            foreach ( $response['files'] as $file ) {
+                $files[] = array(
+                    'filename'  => $file['filename'],
+                    'status'    => $file['status'],
+                    'additions' => $file['additions'],
+                    'deletions' => $file['deletions'],
+                    'changes'   => $file['changes'],
+                );
+            }
+        }
+
+        $data = array(
+            'status'        => isset( $response['status'] ) ? $response['status'] : '',
+            'ahead_by'      => isset( $response['ahead_by'] ) ? $response['ahead_by'] : 0,
+            'behind_by'     => isset( $response['behind_by'] ) ? $response['behind_by'] : 0,
+            'total_commits'  => isset( $response['total_commits'] ) ? $response['total_commits'] : 0,
+            'commits'       => $commits,
+            'files'         => $files,
+        );
+
+        set_transient( $cache_key, $data, self::CACHE_DURATION * 3 );
+
+        return $data;
+    }
+
+    /**
+     * Get repository tags.
+     *
+     * @param string $owner Repository owner.
+     * @param string $repo  Repository name.
+     * @return array|WP_Error
+     */
+    public function get_tags( $owner, $repo ) {
+        $cache_key = self::CACHE_PREFIX . 'tags_' . md5( $owner . $repo );
+        $cached    = get_transient( $cache_key );
+
+        if ( false !== $cached ) {
+            return $cached;
+        }
+
+        $response = $this->api_request( "/repos/{$owner}/{$repo}/tags" );
+
+        if ( is_wp_error( $response ) ) {
+            return $response;
+        }
+
+        $tags = array();
+        foreach ( $response as $tag ) {
+            $tags[] = array(
+                'name'      => $tag['name'],
+                'sha'       => isset( $tag['commit']['sha'] ) ? $tag['commit']['sha'] : '',
+                'short_sha' => isset( $tag['commit']['sha'] ) ? substr( $tag['commit']['sha'], 0, 7 ) : '',
+            );
+        }
+
+        set_transient( $cache_key, $tags, self::CACHE_DURATION * 2 );
+
+        return $tags;
     }
 
     /**
