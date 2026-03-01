@@ -239,11 +239,27 @@ class WP_Puller_Theme_Updater {
 
         update_option( 'wp_puller_last_check', time() );
 
+        // Try to fetch the new version from the repo's style.css
+        $latest_version = '';
+        $theme_path     = get_option( 'wp_puller_theme_path', '' );
+        $style_path     = ! empty( $theme_path ) ? $theme_path . '/style.css' : 'style.css';
+        $style_content  = $this->github_api->get_raw_file( $parsed['owner'], $parsed['repo'], $branch, $style_path );
+
+        if ( ! is_wp_error( $style_content ) && preg_match( '/^\s*Version:\s*(.+)$/mi', $style_content, $matches ) ) {
+            $latest_version = trim( $matches[1] );
+        }
+
+        // Get current installed version
+        $theme           = wp_get_theme();
+        $current_version = $theme->get( 'Version' );
+
         return array(
             'update_available' => ! empty( $current_commit ) && $current_commit !== $latest_commit['sha'],
             'current_commit'   => $current_commit,
             'latest_commit'    => $latest_commit,
             'is_new_setup'     => empty( $current_commit ),
+            'current_version'  => $current_version ?: '',
+            'latest_version'   => $latest_version,
         );
     }
 

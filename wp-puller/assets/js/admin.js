@@ -190,11 +190,27 @@
 
                         if (data.is_new_setup) {
                             html = '<p><strong>Ready to install.</strong> Click "Update Now" to pull from GitHub.</p>';
+                            if (data.latest_version) {
+                                html += '<p>Version in repository: <strong>' + WPPuller.escapeHtml(data.latest_version) + '</strong></p>';
+                            }
                             $result.removeClass('has-update no-update').addClass('has-update');
                         } else if (data.update_available) {
                             html = '<p><strong>Update available!</strong></p>';
-                            html += '<p>Current: <code>' + data.current_commit.substring(0, 7) + '</code></p>';
-                            html += '<p>Latest: <code>' + data.latest_commit.short_sha + '</code>';
+                            if (data.current_version || data.latest_version) {
+                                html += '<p>';
+                                if (data.current_version) {
+                                    html += 'Installed: <strong>' + WPPuller.escapeHtml(data.current_version) + '</strong>';
+                                }
+                                if (data.current_version && data.latest_version) {
+                                    html += ' &rarr; ';
+                                }
+                                if (data.latest_version) {
+                                    html += 'New: <strong>' + WPPuller.escapeHtml(data.latest_version) + '</strong>';
+                                }
+                                html += '</p>';
+                            }
+                            html += '<p>Current commit: <code>' + data.current_commit.substring(0, 7) + '</code>';
+                            html += ' &rarr; Latest: <code>' + data.latest_commit.short_sha + '</code>';
                             if (data.latest_commit.message) {
                                 html += ' - ' + WPPuller.escapeHtml(data.latest_commit.message.substring(0, 60));
                             }
@@ -202,7 +218,12 @@
                             $result.removeClass('has-update no-update').addClass('has-update');
                         } else {
                             html = '<p><strong>Up to date.</strong></p>';
-                            html += '<p>Current commit: <code>' + data.latest_commit.short_sha + '</code></p>';
+                            if (data.current_version) {
+                                html += '<p>Version: <strong>' + WPPuller.escapeHtml(data.current_version) + '</strong>';
+                                html += ' (commit: <code>' + data.latest_commit.short_sha + '</code>)</p>';
+                            } else {
+                                html += '<p>Current commit: <code>' + data.latest_commit.short_sha + '</code></p>';
+                            }
                             $result.removeClass('has-update no-update').addClass('no-update');
                         }
 

@@ -270,11 +270,31 @@ class WP_Puller_Plugin_Updater {
 
         update_option( 'wp_puller_plugin_last_check', time() );
 
+        // Try to fetch the new version from the repo's main plugin file
+        $latest_version = '';
+        $plugin_slug    = get_option( 'wp_puller_plugin_slug', '' );
+        $plugin_path    = get_option( 'wp_puller_plugin_path', '' );
+
+        if ( ! empty( $plugin_slug ) ) {
+            $file_prefix = ! empty( $plugin_path ) ? $plugin_path . '/' : '';
+            $file_content = $this->github_api->get_raw_file( $parsed['owner'], $parsed['repo'], $branch, $file_prefix . $plugin_slug . '.php' );
+
+            if ( ! is_wp_error( $file_content ) && preg_match( '/^\s*\*?\s*Version:\s*(.+)$/mi', $file_content, $matches ) ) {
+                $latest_version = trim( $matches[1] );
+            }
+        }
+
+        // Get current installed version
+        $current_info    = $this->get_current_plugin_info();
+        $current_version = $current_info['version'];
+
         return array(
             'update_available' => ! empty( $current_commit ) && $current_commit !== $latest_commit['sha'],
             'current_commit'   => $current_commit,
             'latest_commit'    => $latest_commit,
             'is_new_setup'     => empty( $current_commit ),
+            'current_version'  => $current_version ?: '',
+            'latest_version'   => $latest_version,
         );
     }
 

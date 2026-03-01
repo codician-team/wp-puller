@@ -156,6 +156,51 @@ class WP_Puller_GitHub_API {
     }
 
     /**
+     * Get raw file content from a repository.
+     *
+     * @param string $owner  Repository owner.
+     * @param string $repo   Repository name.
+     * @param string $branch Branch name.
+     * @param string $path   File path within the repository.
+     * @return string|WP_Error File content or error.
+     */
+    public function get_raw_file( $owner, $repo, $branch, $path ) {
+        $url = sprintf(
+            '%s/%s/%s/%s/%s',
+            self::RAW_BASE,
+            rawurlencode( $owner ),
+            rawurlencode( $repo ),
+            rawurlencode( $branch ),
+            $path
+        );
+
+        $args = array(
+            'timeout'   => 15,
+            'sslverify' => true,
+            'headers'   => array(
+                'User-Agent' => 'WP-Puller/' . WP_PULLER_VERSION,
+            ),
+        );
+
+        $auth_header = $this->get_auth_header();
+        if ( ! empty( $auth_header ) ) {
+            $args['headers']['Authorization'] = $auth_header;
+        }
+
+        $response = wp_remote_get( $url, $args );
+
+        if ( is_wp_error( $response ) ) {
+            return $response;
+        }
+
+        if ( 200 !== wp_remote_retrieve_response_code( $response ) ) {
+            return new WP_Error( 'file_not_found', 'Could not fetch file from repository.' );
+        }
+
+        return wp_remote_retrieve_body( $response );
+    }
+
+    /**
      * Download repository archive as ZIP.
      *
      * @param string $owner  Repository owner.
