@@ -441,7 +441,6 @@ class WP_Puller_Theme_Updater {
         $parsed = $this->github_api->parse_repo_url( $repo_url );
 
         $deployed_branch = get_option( 'wp_puller_deployed_branch', '' );
-        $asset_type      = get_option( 'wp_puller_asset_type', 'theme' );
 
         return array(
             'is_configured'   => ! empty( $repo_url ) && false !== $parsed,
@@ -455,8 +454,7 @@ class WP_Puller_Theme_Updater {
             'repo_owner'      => $parsed ? $parsed['owner'] : '',
             'repo_name'       => $parsed ? $parsed['repo'] : '',
             'deployed_branch' => $deployed_branch,
-            'asset_type'      => $asset_type,
-            'plugin_slug'     => get_option( 'wp_puller_plugin_slug', '' ),
+            'asset_type'      => 'theme',
         );
     }
 }

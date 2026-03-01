@@ -138,8 +138,8 @@ class WP_Puller_Admin {
                 'testing'          => __( 'Testing connection...', 'wp-puller' ),
                 'connected'        => __( 'Connected successfully!', 'wp-puller' ),
                 'checking'         => __( 'Checking for updates...', 'wp-puller' ),
-                'updating'         => __( 'Updating theme...', 'wp-puller' ),
-                'updated'          => __( 'Theme updated successfully!', 'wp-puller' ),
+                'updating'         => __( 'Updating...', 'wp-puller' ),
+                'updated'          => __( 'Updated successfully!', 'wp-puller' ),
                 'restoring'        => __( 'Restoring backup...', 'wp-puller' ),
                 'restored'         => __( 'Backup restored successfully!', 'wp-puller' ),
                 'deleting'         => __( 'Deleting backup...', 'wp-puller' ),
@@ -147,7 +147,7 @@ class WP_Puller_Admin {
                 'regenerating'     => __( 'Regenerating secret...', 'wp-puller' ),
                 'regenerated'      => __( 'Secret regenerated!', 'wp-puller' ),
                 'error'            => __( 'An error occurred.', 'wp-puller' ),
-                'confirmRestore'   => __( 'Are you sure you want to restore this backup? Your current theme will be replaced.', 'wp-puller' ),
+                'confirmRestore'   => __( 'Are you sure you want to restore this backup? Your current files will be replaced.', 'wp-puller' ),
                 'confirmDelete'    => __( 'Are you sure you want to delete this backup?', 'wp-puller' ),
                 'confirmRegenerate'=> __( 'Are you sure? You will need to update the secret in GitHub.', 'wp-puller' ),
                 'deployingBranch'     => __( 'Deploying branch...', 'wp-puller' ),
@@ -155,12 +155,15 @@ class WP_Puller_Admin {
                 'confirmBranchDeploy' => __( 'Deploy this branch? A backup will be created first.', 'wp-puller' ),
                 'comparing'           => __( 'Comparing branches...', 'wp-puller' ),
                 'noChanges'           => __( 'No changes between these branches.', 'wp-puller' ),
-                'updatingPlugin'      => __( 'Updating plugin...', 'wp-puller' ),
-                'pluginUpdated'       => __( 'Plugin updated successfully!', 'wp-puller' ),
             ),
-            'currentBranch'  => get_option( 'wp_puller_branch', 'main' ),
-            'deployedBranch' => get_option( 'wp_puller_deployed_branch', '' ),
-            'assetType'      => get_option( 'wp_puller_asset_type', 'theme' ),
+            'theme'  => array(
+                'branch'         => get_option( 'wp_puller_branch', 'main' ),
+                'deployedBranch' => get_option( 'wp_puller_deployed_branch', '' ),
+            ),
+            'plugin' => array(
+                'branch'         => get_option( 'wp_puller_plugin_branch', 'main' ),
+                'deployedBranch' => get_option( 'wp_puller_plugin_deployed_branch', '' ),
+            ),
         ) );
     }
 
@@ -172,31 +175,40 @@ class WP_Puller_Admin {
             wp_die( esc_html__( 'You do not have permission to access this page.', 'wp-puller' ) );
         }
 
-        $asset_type = get_option( 'wp_puller_asset_type', 'theme' );
+        $theme_status  = $this->updater->get_status();
+        $plugin_status = $this->plugin_updater->get_status();
+        $plugin_info   = $this->plugin_updater->get_current_plugin_info();
+        $plugin_slug   = get_option( 'wp_puller_plugin_slug', '' );
 
-        if ( 'plugin' === $asset_type ) {
-            $status      = $this->plugin_updater->get_status();
-            $plugin_info = $this->plugin_updater->get_current_plugin_info();
-            $plugin_slug = get_option( 'wp_puller_plugin_slug', '' );
-            $backups     = $this->backup->get_backups( 'plugin_' . $plugin_slug );
-        } else {
-            $status      = $this->updater->get_status();
-            $plugin_info = array();
-            $backups     = $this->backup->get_backups( wp_get_theme()->get_stylesheet() );
-        }
+        $theme_backups  = $this->backup->get_backups( wp_get_theme()->get_stylesheet() );
+        $plugin_backups = ! empty( $plugin_slug ) ? $this->backup->get_backups( 'plugin_' . $plugin_slug ) : array();
 
         $data = array(
-            'status'       => $status,
-            'theme_info'   => $this->updater->get_current_theme_info(),
-            'plugin_info'  => $plugin_info,
-            'webhook_info' => WP_Puller_Webhook_Handler::get_setup_instructions(),
-            'backups'      => $backups,
-            'logs'         => $this->logger->get_recent_logs( 10 ),
-            'backup_class' => $this->backup,
-            'asset_type'   => $asset_type,
+            'theme_status'   => $theme_status,
+            'plugin_status'  => $plugin_status,
+            'theme_info'     => $this->updater->get_current_theme_info(),
+            'plugin_info'    => $plugin_info,
+            'webhook_info'   => WP_Puller_Webhook_Handler::get_setup_instructions(),
+            'theme_backups'  => $theme_backups,
+            'plugin_backups' => $plugin_backups,
+            'logs'           => $this->logger->get_recent_logs( 10 ),
+            'backup_class'   => $this->backup,
         );
 
         include WP_PULLER_PLUGIN_DIR . 'templates/admin-page.php';
+    }
+
+    /**
+     * Get asset_type from the current AJAX request.
+     *
+     * @return string 'theme' or 'plugin'.
+     */
+    private function get_request_asset_type() {
+        $asset_type = isset( $_POST['asset_type'] ) ? sanitize_text_field( wp_unslash( $_POST['asset_type'] ) ) : 'theme';
+        if ( ! in_array( $asset_type, array( 'theme', 'plugin' ), true ) ) {
+            $asset_type = 'theme';
+        }
+        return $asset_type;
     }
 
     /**
@@ -205,46 +217,68 @@ class WP_Puller_Admin {
     public function ajax_save_settings() {
         $this->verify_ajax_request();
 
+        $asset_type   = $this->get_request_asset_type();
         $repo_url     = isset( $_POST['repo_url'] ) ? esc_url_raw( wp_unslash( $_POST['repo_url'] ) ) : '';
         $branch       = isset( $_POST['branch'] ) ? sanitize_text_field( wp_unslash( $_POST['branch'] ) ) : 'main';
-        $theme_path   = isset( $_POST['theme_path'] ) ? sanitize_text_field( wp_unslash( $_POST['theme_path'] ) ) : '';
+        $path         = isset( $_POST['path'] ) ? sanitize_text_field( wp_unslash( $_POST['path'] ) ) : '';
         $pat          = isset( $_POST['pat'] ) ? sanitize_text_field( wp_unslash( $_POST['pat'] ) ) : '';
         $auto_update  = isset( $_POST['auto_update'] ) && 'true' === $_POST['auto_update'];
         $backup_count = isset( $_POST['backup_count'] ) ? absint( $_POST['backup_count'] ) : 3;
-        $asset_type   = isset( $_POST['asset_type'] ) ? sanitize_text_field( wp_unslash( $_POST['asset_type'] ) ) : 'theme';
-        $plugin_slug  = isset( $_POST['plugin_slug'] ) ? sanitize_file_name( wp_unslash( $_POST['plugin_slug'] ) ) : '';
 
-        // Clean up theme path - remove leading/trailing slashes
-        $theme_path = trim( $theme_path, '/' );
+        // Clean up path - remove leading/trailing slashes
+        $path = trim( $path, '/' );
 
-        // Validate asset type
-        if ( ! in_array( $asset_type, array( 'theme', 'plugin' ), true ) ) {
-            $asset_type = 'theme';
-        }
-
-        update_option( 'wp_puller_repo_url', $repo_url );
-        update_option( 'wp_puller_branch', $branch );
-        update_option( 'wp_puller_theme_path', $theme_path );
-        update_option( 'wp_puller_auto_update', $auto_update );
+        // Shared options
         update_option( 'wp_puller_backup_count', max( 1, min( 10, $backup_count ) ) );
-        update_option( 'wp_puller_asset_type', $asset_type );
-        update_option( 'wp_puller_plugin_slug', $plugin_slug );
 
         if ( ! empty( $pat ) && '*****' !== substr( $pat, 0, 5 ) ) {
             update_option( 'wp_puller_pat', WP_Puller::encrypt( $pat ) );
         }
 
+        if ( 'plugin' === $asset_type ) {
+            $plugin_slug = isset( $_POST['plugin_slug'] ) ? sanitize_file_name( wp_unslash( $_POST['plugin_slug'] ) ) : '';
+
+            update_option( 'wp_puller_plugin_repo_url', $repo_url );
+            update_option( 'wp_puller_plugin_branch', $branch );
+            update_option( 'wp_puller_plugin_path', $path );
+            update_option( 'wp_puller_plugin_slug', $plugin_slug );
+            update_option( 'wp_puller_plugin_auto_update', $auto_update );
+        } else {
+            update_option( 'wp_puller_repo_url', $repo_url );
+            update_option( 'wp_puller_branch', $branch );
+            update_option( 'wp_puller_theme_path', $path );
+            update_option( 'wp_puller_auto_update', $auto_update );
+        }
+
         $this->github_api->clear_cache();
 
         $this->logger->log(
-            __( 'Settings updated', 'wp-puller' ),
+            sprintf(
+                /* translators: %s: asset type */
+                __( '%s settings updated', 'wp-puller' ),
+                ucfirst( $asset_type )
+            ),
             WP_Puller_Logger::STATUS_INFO,
             WP_Puller_Logger::SOURCE_MANUAL
         );
 
-        wp_send_json_success( array(
+        // Return updated status so JS can refresh the UI
+        $status = ( 'plugin' === $asset_type )
+            ? $this->plugin_updater->get_status()
+            : $this->updater->get_status();
+
+        $response = array(
             'message' => __( 'Settings saved successfully.', 'wp-puller' ),
-        ) );
+            'status'  => $status,
+        );
+
+        if ( 'plugin' === $asset_type ) {
+            $response['plugin_info'] = $this->plugin_updater->get_current_plugin_info();
+        } else {
+            $response['theme_info'] = $this->updater->get_current_theme_info();
+        }
+
+        wp_send_json_success( $response );
     }
 
     /**
@@ -289,7 +323,7 @@ class WP_Puller_Admin {
     public function ajax_check_updates() {
         $this->verify_ajax_request();
 
-        $asset_type = get_option( 'wp_puller_asset_type', 'theme' );
+        $asset_type = $this->get_request_asset_type();
 
         if ( 'plugin' === $asset_type ) {
             $result = $this->plugin_updater->check_for_updates();
@@ -312,7 +346,7 @@ class WP_Puller_Admin {
     public function ajax_update_theme() {
         $this->verify_ajax_request();
 
-        $asset_type = get_option( 'wp_puller_asset_type', 'theme' );
+        $asset_type = $this->get_request_asset_type();
 
         if ( 'plugin' === $asset_type ) {
             $result = $this->plugin_updater->update( WP_Puller_Logger::SOURCE_MANUAL );
@@ -330,12 +364,20 @@ class WP_Puller_Admin {
             ? $this->plugin_updater->get_status()
             : $this->updater->get_status();
 
-        wp_send_json_success( array(
+        $response = array(
             'message' => ( 'plugin' === $asset_type )
                 ? __( 'Plugin updated successfully!', 'wp-puller' )
                 : __( 'Theme updated successfully!', 'wp-puller' ),
             'status'  => $status,
-        ) );
+        );
+
+        if ( 'plugin' === $asset_type ) {
+            $response['plugin_info'] = $this->plugin_updater->get_current_plugin_info();
+        } else {
+            $response['theme_info'] = $this->updater->get_current_theme_info();
+        }
+
+        wp_send_json_success( $response );
     }
 
     /**
@@ -443,7 +485,7 @@ class WP_Puller_Admin {
             ) );
         }
 
-        $asset_type = get_option( 'wp_puller_asset_type', 'theme' );
+        $asset_type = $this->get_request_asset_type();
 
         if ( 'plugin' === $asset_type ) {
             $result = $this->plugin_updater->deploy_branch( $branch );
@@ -461,7 +503,7 @@ class WP_Puller_Admin {
             ? $this->plugin_updater->get_status()
             : $this->updater->get_status();
 
-        wp_send_json_success( array(
+        $response = array(
             'message'         => sprintf(
                 /* translators: %s: branch name */
                 __( 'Branch "%s" deployed successfully!', 'wp-puller' ),
@@ -469,7 +511,15 @@ class WP_Puller_Admin {
             ),
             'status'          => $status,
             'deployed_branch' => $branch,
-        ) );
+        );
+
+        if ( 'plugin' === $asset_type ) {
+            $response['plugin_info'] = $this->plugin_updater->get_current_plugin_info();
+        } else {
+            $response['theme_info'] = $this->updater->get_current_theme_info();
+        }
+
+        wp_send_json_success( $response );
     }
 
     /**
@@ -478,7 +528,19 @@ class WP_Puller_Admin {
     public function ajax_get_branches_with_info() {
         $this->verify_ajax_request();
 
-        $repo_url = get_option( 'wp_puller_repo_url', '' );
+        $asset_type = $this->get_request_asset_type();
+
+        if ( 'plugin' === $asset_type ) {
+            $repo_url = get_option( 'wp_puller_plugin_repo_url', '' );
+            $configured_branch = get_option( 'wp_puller_plugin_branch', 'main' );
+            $deployed_branch   = get_option( 'wp_puller_plugin_deployed_branch', '' );
+            $current_commit    = get_option( 'wp_puller_plugin_latest_commit', '' );
+        } else {
+            $repo_url = get_option( 'wp_puller_repo_url', '' );
+            $configured_branch = get_option( 'wp_puller_branch', 'main' );
+            $deployed_branch   = get_option( 'wp_puller_deployed_branch', '' );
+            $current_commit    = get_option( 'wp_puller_latest_commit', '' );
+        }
 
         if ( empty( $repo_url ) ) {
             wp_send_json_error( array(
@@ -496,7 +558,6 @@ class WP_Puller_Admin {
 
         $this->github_api->clear_cache();
 
-        // Fetches up to 10 most recently updated branches, already sorted and enriched with commit info
         $branches = $this->github_api->get_branches_with_info( $parsed['owner'], $parsed['repo'], 10 );
 
         if ( is_wp_error( $branches ) ) {
@@ -507,9 +568,9 @@ class WP_Puller_Admin {
 
         wp_send_json_success( array(
             'branches'        => $branches,
-            'configured'      => get_option( 'wp_puller_branch', 'main' ),
-            'deployed_branch' => get_option( 'wp_puller_deployed_branch', '' ),
-            'current_commit'  => get_option( 'wp_puller_latest_commit', '' ),
+            'configured'      => $configured_branch,
+            'deployed_branch' => $deployed_branch,
+            'current_commit'  => $current_commit,
         ) );
     }
 
@@ -528,8 +589,15 @@ class WP_Puller_Admin {
             ) );
         }
 
-        $repo_url = get_option( 'wp_puller_repo_url', '' );
-        $parsed   = $this->github_api->parse_repo_url( $repo_url );
+        $asset_type = $this->get_request_asset_type();
+
+        if ( 'plugin' === $asset_type ) {
+            $repo_url = get_option( 'wp_puller_plugin_repo_url', '' );
+        } else {
+            $repo_url = get_option( 'wp_puller_repo_url', '' );
+        }
+
+        $parsed = $this->github_api->parse_repo_url( $repo_url );
 
         if ( ! $parsed ) {
             wp_send_json_error( array(

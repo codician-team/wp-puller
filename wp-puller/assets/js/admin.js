@@ -11,82 +11,103 @@
     var WPPuller = {
         init: function() {
             this.bindEvents();
-            this.initAssetTypeToggle();
+        },
+
+        /**
+         * Get the active tab's asset type.
+         */
+        getActiveAssetType: function() {
+            return $('.wp-puller-tab-content-active').data('asset-type') || 'theme';
+        },
+
+        /**
+         * Get the active tab container.
+         */
+        getActiveTab: function() {
+            return $('.wp-puller-tab-content-active');
+        },
+
+        /**
+         * Get asset type from a button's closest tab container.
+         */
+        getAssetTypeFromElement: function($el) {
+            return $el.closest('.wp-puller-tab-content').data('asset-type') || 'theme';
         },
 
         bindEvents: function() {
-            $('#wp-puller-settings-form').on('submit', this.saveSettings.bind(this));
-            $('#wp-puller-test-connection').on('click', this.testConnection.bind(this));
-            $('#wp-puller-check-updates').on('click', this.checkUpdates.bind(this));
-            $('#wp-puller-update-now').on('click', this.updateTheme.bind(this));
-            $('#wp-puller-regenerate-secret').on('click', this.regenerateSecret.bind(this));
-            $('#wp-puller-clear-logs').on('click', this.clearLogs.bind(this));
+            // Tab switching
+            $(document).on('click', '.wp-puller-tab', this.switchTab.bind(this));
 
+            // Per-tab actions (use delegation from tab containers)
+            $(document).on('submit', '.wp-puller-settings-form', this.saveSettings.bind(this));
+            $(document).on('click', '.wp-puller-test-connection', this.testConnection.bind(this));
+            $(document).on('click', '.wp-puller-check-updates', this.checkUpdates.bind(this));
+            $(document).on('click', '.wp-puller-update-now', this.updateAsset.bind(this));
+            $(document).on('click', '.wp-puller-refresh-branches', this.refreshBranchList.bind(this));
+            $(document).on('click', '.wp-puller-deploy-branch', this.deployBranch.bind(this));
+            $(document).on('click', '.wp-puller-compare-branch', this.compareBranch.bind(this));
+            $(document).on('click', '.wp-puller-close-compare', this.closeCompare.bind(this));
+
+            // Shared actions
             $(document).on('click', '.wp-puller-restore-backup', this.restoreBackup.bind(this));
             $(document).on('click', '.wp-puller-delete-backup', this.deleteBackup.bind(this));
             $(document).on('click', '.wp-puller-copy-btn', this.copyToClipboard.bind(this));
-
-            // Branch testing
-            $('#wp-puller-refresh-branches').on('click', this.refreshBranchList.bind(this));
-            $(document).on('click', '.wp-puller-deploy-branch', this.deployBranch.bind(this));
-            $(document).on('click', '.wp-puller-compare-branch', this.compareBranch.bind(this));
-            $('#wp-puller-close-compare').on('click', this.closeCompare.bind(this));
-
-            // Asset type toggle
-            $('input[name="asset_type"]').on('change', this.toggleAssetType.bind(this));
+            $('#wp-puller-regenerate-secret').on('click', this.regenerateSecret.bind(this));
+            $('#wp-puller-clear-logs').on('click', this.clearLogs.bind(this));
         },
 
-        initAssetTypeToggle: function() {
-            var assetType = $('input[name="asset_type"]:checked').val() || 'theme';
-            this.applyAssetTypeUI(assetType);
+        // --- Tab Switching ---
+
+        switchTab: function(e) {
+            var $btn = $(e.currentTarget);
+            var tab = $btn.data('tab');
+
+            // Update tab buttons
+            $('.wp-puller-tab').removeClass('wp-puller-tab-active');
+            $btn.addClass('wp-puller-tab-active');
+
+            // Update tab content
+            $('.wp-puller-tab-content').removeClass('wp-puller-tab-content-active');
+            $('#wp-puller-tab-' + tab).addClass('wp-puller-tab-content-active');
         },
 
-        toggleAssetType: function() {
-            var assetType = $('input[name="asset_type"]:checked').val();
-            this.applyAssetTypeUI(assetType);
-        },
-
-        applyAssetTypeUI: function(assetType) {
-            if (assetType === 'plugin') {
-                $('#wp-puller-plugin-slug-field').show();
-                $('.wp-puller-label-theme').hide();
-                $('.wp-puller-label-plugin').show();
-            } else {
-                $('#wp-puller-plugin-slug-field').hide();
-                $('.wp-puller-label-plugin').hide();
-                $('.wp-puller-label-theme').show();
-            }
-        },
+        // --- Settings ---
 
         saveSettings: function(e) {
             e.preventDefault();
 
             var $form = $(e.currentTarget);
             var $btn = $form.find('[type="submit"]');
+            var assetType = $form.data('asset-type');
 
             this.setLoading($btn, true);
+
+            var data = {
+                action: 'wp_puller_save_settings',
+                nonce: wpPuller.nonce,
+                asset_type: assetType,
+                repo_url: $form.find('[name="repo_url"]').val(),
+                branch: $form.find('[name="branch"]').val(),
+                path: $form.find('[name="path"]').val(),
+                pat: $form.find('[name="pat"]').val(),
+                auto_update: $form.find('[name="auto_update"]').is(':checked') ? 'true' : 'false',
+                backup_count: $form.find('[name="backup_count"]').val()
+            };
+
+            if (assetType === 'plugin') {
+                data.plugin_slug = $form.find('[name="plugin_slug"]').val();
+            }
 
             $.ajax({
                 url: wpPuller.ajaxUrl,
                 type: 'POST',
-                data: {
-                    action: 'wp_puller_save_settings',
-                    nonce: wpPuller.nonce,
-                    repo_url: $('#wp-puller-repo-url').val(),
-                    branch: $('#wp-puller-branch').val(),
-                    theme_path: $('#wp-puller-theme-path').val(),
-                    pat: $('#wp-puller-pat').val(),
-                    auto_update: $('#wp-puller-auto-update').is(':checked') ? 'true' : 'false',
-                    backup_count: $('#wp-puller-backup-count').val(),
-                    asset_type: $('input[name="asset_type"]:checked').val() || 'theme',
-                    plugin_slug: $('#wp-puller-plugin-slug').val()
-                },
+                data: data,
                 success: function(response) {
                     if (response.success) {
                         WPPuller.showNotice(response.data.message, 'success');
-                        setTimeout(function() {
-                            location.reload();
-                        }, 1500);
+                        if (response.data.status) {
+                            WPPuller.updateStatusUI(assetType, response.data.status, response.data);
+                        }
                     } else {
                         WPPuller.showNotice(response.data.message, 'error');
                     }
@@ -102,7 +123,8 @@
 
         testConnection: function(e) {
             var $btn = $(e.currentTarget);
-            var repoUrl = $('#wp-puller-repo-url').val();
+            var $form = $btn.closest('.wp-puller-settings-form');
+            var repoUrl = $form.find('[name="repo_url"]').val();
 
             if (!repoUrl) {
                 this.showNotice('Please enter a repository URL.', 'error');
@@ -142,9 +164,13 @@
             });
         },
 
+        // --- Updates ---
+
         checkUpdates: function(e) {
             var $btn = $(e.currentTarget);
-            var $result = $('#wp-puller-update-result');
+            var assetType = this.getAssetTypeFromElement($btn);
+            var $tab = $btn.closest('.wp-puller-tab-content');
+            var $result = $tab.find('.wp-puller-update-result');
 
             this.setLoading($btn, true);
             $result.hide();
@@ -154,7 +180,8 @@
                 type: 'POST',
                 data: {
                     action: 'wp_puller_check_updates',
-                    nonce: wpPuller.nonce
+                    nonce: wpPuller.nonce,
+                    asset_type: assetType
                 },
                 success: function(response) {
                     if (response.success) {
@@ -180,7 +207,7 @@
                         }
 
                         $result.html(html).show();
-                        $('#last-check').text('just now');
+                        $tab.find('.wp-puller-last-check').text('just now');
                     } else {
                         WPPuller.showNotice(response.data.message, 'error');
                     }
@@ -194,8 +221,9 @@
             });
         },
 
-        updateTheme: function(e) {
+        updateAsset: function(e) {
             var $btn = $(e.currentTarget);
+            var assetType = this.getAssetTypeFromElement($btn);
 
             this.setLoading($btn, true);
 
@@ -204,21 +232,16 @@
                 type: 'POST',
                 data: {
                     action: 'wp_puller_update_theme',
-                    nonce: wpPuller.nonce
+                    nonce: wpPuller.nonce,
+                    asset_type: assetType
                 },
                 success: function(response) {
                     if (response.success) {
                         WPPuller.showNotice(response.data.message, 'success');
+                        WPPuller.updateStatusUI(assetType, response.data.status, response.data);
 
-                        if (response.data.status) {
-                            $('#current-commit').text(response.data.status.short_commit || '-');
-                        }
-
-                        $('#wp-puller-update-result').hide();
-
-                        setTimeout(function() {
-                            location.reload();
-                        }, 1500);
+                        var $tab = $('#wp-puller-tab-' + assetType);
+                        $tab.find('.wp-puller-update-result').hide();
                     } else {
                         WPPuller.showNotice(response.data.message, 'error');
                     }
@@ -232,11 +255,48 @@
             });
         },
 
+        /**
+         * Update the status card UI after an update/save/deploy without page reload.
+         */
+        updateStatusUI: function(assetType, status, responseData) {
+            var $tab = $('#wp-puller-tab-' + assetType);
+
+            // Update commit
+            if (status && status.short_commit) {
+                $tab.find('.wp-puller-current-commit').text(status.short_commit);
+            }
+
+            // Update last check
+            $tab.find('.wp-puller-last-check').text('just now');
+
+            // Update version display
+            if (assetType === 'plugin' && responseData.plugin_info) {
+                var info = responseData.plugin_info;
+                $tab.find('.wp-puller-asset-name').text(info.name || info.slug || '-');
+                $tab.find('.wp-puller-asset-version').text(info.version || '-');
+            } else if (assetType === 'theme' && responseData.theme_info) {
+                var tInfo = responseData.theme_info;
+                $tab.find('.wp-puller-asset-name').text(tInfo.name || '-');
+                $tab.find('.wp-puller-asset-version').text(tInfo.version || '-');
+            }
+
+            // Update status badge
+            if (status && status.is_configured) {
+                $tab.find('.wp-puller-status-badge')
+                    .removeClass('wp-puller-badge-warning')
+                    .addClass('wp-puller-badge-success')
+                    .text('Connected');
+                $tab.find('.wp-puller-check-updates, .wp-puller-update-now').prop('disabled', false);
+            }
+        },
+
         // --- Branch Testing ---
 
         refreshBranchList: function(e) {
-            var $btn = $(e && e.currentTarget ? e.currentTarget : '#wp-puller-refresh-branches');
-            var $container = $('#wp-puller-branch-list');
+            var $btn = $(e.currentTarget);
+            var assetType = this.getAssetTypeFromElement($btn);
+            var $tab = $btn.closest('.wp-puller-tab-content');
+            var $container = $tab.find('.wp-puller-branch-list');
 
             this.setLoading($btn, true);
             $container.html('<p class="wp-puller-empty">Loading branches...</p>');
@@ -246,11 +306,12 @@
                 type: 'POST',
                 data: {
                     action: 'wp_puller_get_branches_with_info',
-                    nonce: wpPuller.nonce
+                    nonce: wpPuller.nonce,
+                    asset_type: assetType
                 },
                 success: function(response) {
                     if (response.success) {
-                        WPPuller.renderBranchList(response.data);
+                        WPPuller.renderBranchList($container, response.data);
                     } else {
                         $container.html('<p class="wp-puller-empty">' + WPPuller.escapeHtml(response.data.message) + '</p>');
                     }
@@ -264,8 +325,7 @@
             });
         },
 
-        renderBranchList: function(data) {
-            var $container = $('#wp-puller-branch-list');
+        renderBranchList: function($container, data) {
             var branches = data.branches;
             var configured = data.configured;
             var deployed = data.deployed_branch;
@@ -327,6 +387,7 @@
         deployBranch: function(e) {
             var $btn = $(e.currentTarget);
             var branch = $btn.data('branch');
+            var assetType = this.getAssetTypeFromElement($btn);
 
             if (!confirm(wpPuller.strings.confirmBranchDeploy)) {
                 return;
@@ -340,15 +401,17 @@
                 data: {
                     action: 'wp_puller_deploy_branch',
                     nonce: wpPuller.nonce,
-                    branch: branch
+                    branch: branch,
+                    asset_type: assetType
                 },
                 success: function(response) {
                     if (response.success) {
                         WPPuller.showNotice(response.data.message, 'success');
-                        wpPuller.deployedBranch = branch;
+                        WPPuller.updateStatusUI(assetType, response.data.status, response.data);
 
-                        if (response.data.status) {
-                            $('#current-commit').text(response.data.status.short_commit || '-');
+                        // Update deployed branch tracking
+                        if (wpPuller[assetType]) {
+                            wpPuller[assetType].deployedBranch = branch;
                         }
 
                         setTimeout(function() {
@@ -372,7 +435,9 @@
         compareBranch: function(e) {
             var $btn = $(e.currentTarget);
             var headBranch = $btn.data('branch');
-            var baseBranch = wpPuller.deployedBranch || wpPuller.currentBranch || 'main';
+            var assetType = this.getAssetTypeFromElement($btn);
+            var assetData = wpPuller[assetType] || {};
+            var baseBranch = assetData.deployedBranch || assetData.branch || 'main';
 
             if (headBranch === baseBranch) {
                 this.showNotice('Cannot compare a branch with itself.', 'info');
@@ -381,9 +446,10 @@
 
             this.setLoading($btn, true);
 
-            var $panel = $('#wp-puller-compare-panel');
-            var $content = $('#wp-puller-compare-content');
-            var $title = $('#wp-puller-compare-title');
+            var $tab = $btn.closest('.wp-puller-tab-content');
+            var $panel = $tab.find('.wp-puller-compare-panel');
+            var $content = $tab.find('.wp-puller-compare-content');
+            var $title = $tab.find('.wp-puller-compare-title');
 
             $title.text(baseBranch + ' ... ' + headBranch);
             $content.html('<p>Loading comparison...</p>');
@@ -396,11 +462,12 @@
                     action: 'wp_puller_compare_branches',
                     nonce: wpPuller.nonce,
                     base: baseBranch,
-                    head: headBranch
+                    head: headBranch,
+                    asset_type: assetType
                 },
                 success: function(response) {
                     if (response.success) {
-                        WPPuller.renderComparison(response.data, baseBranch, headBranch);
+                        WPPuller.renderComparison($content, response.data, baseBranch, headBranch);
                     } else {
                         $content.html('<p class="wp-puller-empty">' + WPPuller.escapeHtml(response.data.message) + '</p>');
                     }
@@ -414,8 +481,7 @@
             });
         },
 
-        renderComparison: function(data, baseBranch, headBranch) {
-            var $content = $('#wp-puller-compare-content');
+        renderComparison: function($content, data) {
             var html = '';
 
             // Summary
@@ -492,11 +558,11 @@
             $content.html(html);
         },
 
-        closeCompare: function() {
-            $('#wp-puller-compare-panel').hide();
+        closeCompare: function(e) {
+            $(e.currentTarget).closest('.wp-puller-compare-panel').hide();
         },
 
-        // --- Existing functionality ---
+        // --- Shared functionality ---
 
         restoreBackup: function(e) {
             var $btn = $(e.currentTarget);
@@ -557,12 +623,6 @@
                     if (response.success) {
                         $btn.closest('.wp-puller-backup-item').fadeOut(function() {
                             $(this).remove();
-
-                            if ($('#wp-puller-backup-list li').length === 0) {
-                                $('#wp-puller-backup-list').replaceWith(
-                                    '<p class="wp-puller-empty">No backups yet. A backup is created automatically before each update.</p>'
-                                );
-                            }
                         });
                         WPPuller.showNotice(wpPuller.strings.deleted, 'success');
                     } else {

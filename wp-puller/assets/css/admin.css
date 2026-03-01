@@ -63,6 +63,57 @@
     color: #1d4ed8;
 }
 
+/* Tabs */
+.wp-puller-tabs {
+    display: flex;
+    gap: 0;
+    margin-bottom: 20px;
+    border-bottom: 2px solid #c3c4c7;
+}
+
+.wp-puller-tab {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 10px 20px;
+    border: none;
+    background: none;
+    font-size: 14px;
+    font-weight: 500;
+    color: #50575e;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -2px;
+    transition: color 0.15s, border-color 0.15s;
+}
+
+.wp-puller-tab:hover {
+    color: #2271b1;
+}
+
+.wp-puller-tab .dashicons {
+    font-size: 18px;
+    width: 18px;
+    height: 18px;
+}
+
+.wp-puller-tab-active {
+    color: #2271b1;
+    border-bottom-color: #2271b1;
+}
+
+.wp-puller-tab-content {
+    display: none;
+}
+
+.wp-puller-tab-content-active {
+    display: block;
+}
+
+.wp-puller-shared-section {
+    margin-top: 20px;
+}
+
 /* Grid Layout */
 .wp-puller-grid {
     display: grid;
@@ -611,25 +662,6 @@
     color: #1d4ed8;
 }
 
-/* Radio group */
-.wp-puller-radio-group {
-    display: flex;
-    gap: 16px;
-    margin-bottom: 4px;
-}
-
-.wp-puller-radio-label {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    font-weight: 400;
-    cursor: pointer;
-}
-
-.wp-puller-radio-label input[type="radio"] {
-    margin: 0;
-}
-
 /* Deployed notice */
 .wp-puller-deployed-notice {
     display: flex;
@@ -944,8 +976,4 @@
         display: none;
     }
 
-    .wp-puller-radio-group {
-        flex-direction: column;
-        gap: 8px;
-    }
 }

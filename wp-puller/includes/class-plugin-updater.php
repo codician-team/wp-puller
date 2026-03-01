@@ -3,6 +3,7 @@
  * Plugin Updater class for WP Puller.
  *
  * Handles deploying WordPress plugins from GitHub repositories.
+ * Uses wp_puller_plugin_* option keys so theme and plugin can coexist.
  *
  * @package WP_Puller
  * @since 1.1.0
@@ -58,13 +59,13 @@ class WP_Puller_Plugin_Updater {
      * @return bool|WP_Error True on success, WP_Error on failure.
      */
     public function update( $source = 'manual' ) {
-        $repo_url = get_option( 'wp_puller_repo_url', '' );
-        $branch   = get_option( 'wp_puller_branch', 'main' );
+        $repo_url = get_option( 'wp_puller_plugin_repo_url', '' );
+        $branch   = get_option( 'wp_puller_plugin_branch', 'main' );
 
         if ( empty( $repo_url ) ) {
             $error = new WP_Error(
                 'no_repo',
-                __( 'No GitHub repository configured.', 'wp-puller' )
+                __( 'No GitHub repository configured for plugin.', 'wp-puller' )
             );
             $this->logger->log_update_error( $error->get_error_message(), $source );
             return $error;
@@ -126,8 +127,8 @@ class WP_Puller_Plugin_Updater {
             return $result;
         }
 
-        update_option( 'wp_puller_latest_commit', $latest_commit['sha'] );
-        update_option( 'wp_puller_last_check', time() );
+        update_option( 'wp_puller_plugin_latest_commit', $latest_commit['sha'] );
+        update_option( 'wp_puller_plugin_last_check', time() );
 
         $this->logger->log_update_success( $latest_commit['short_sha'], $source, array(
             'commit_sha'     => $latest_commit['sha'],
@@ -148,12 +149,12 @@ class WP_Puller_Plugin_Updater {
      * @return bool|WP_Error True on success, WP_Error on failure.
      */
     public function deploy_branch( $branch, $source = 'branch-test' ) {
-        $repo_url = get_option( 'wp_puller_repo_url', '' );
+        $repo_url = get_option( 'wp_puller_plugin_repo_url', '' );
 
         if ( empty( $repo_url ) ) {
             $error = new WP_Error(
                 'no_repo',
-                __( 'No GitHub repository configured.', 'wp-puller' )
+                __( 'No GitHub repository configured for plugin.', 'wp-puller' )
             );
             $this->logger->log_update_error( $error->get_error_message(), $source );
             return $error;
@@ -215,10 +216,10 @@ class WP_Puller_Plugin_Updater {
             return $result;
         }
 
-        update_option( 'wp_puller_latest_commit', $latest_commit['sha'] );
-        update_option( 'wp_puller_last_check', time() );
-        update_option( 'wp_puller_deployed_branch', $branch );
-        update_option( 'wp_puller_deployed_commit', $latest_commit['sha'] );
+        update_option( 'wp_puller_plugin_latest_commit', $latest_commit['sha'] );
+        update_option( 'wp_puller_plugin_last_check', time() );
+        update_option( 'wp_puller_plugin_deployed_branch', $branch );
+        update_option( 'wp_puller_plugin_deployed_commit', $latest_commit['sha'] );
 
         $this->logger->log_update_success( $latest_commit['short_sha'], $source, array(
             'commit_sha'     => $latest_commit['sha'],
@@ -238,13 +239,13 @@ class WP_Puller_Plugin_Updater {
      * @return array|WP_Error Array with update info, or WP_Error on failure.
      */
     public function check_for_updates() {
-        $repo_url = get_option( 'wp_puller_repo_url', '' );
-        $branch   = get_option( 'wp_puller_branch', 'main' );
+        $repo_url = get_option( 'wp_puller_plugin_repo_url', '' );
+        $branch   = get_option( 'wp_puller_plugin_branch', 'main' );
 
         if ( empty( $repo_url ) ) {
             return new WP_Error(
                 'no_repo',
-                __( 'No GitHub repository configured.', 'wp-puller' )
+                __( 'No GitHub repository configured for plugin.', 'wp-puller' )
             );
         }
 
@@ -265,9 +266,9 @@ class WP_Puller_Plugin_Updater {
             return $latest_commit;
         }
 
-        $current_commit = get_option( 'wp_puller_latest_commit', '' );
+        $current_commit = get_option( 'wp_puller_plugin_latest_commit', '' );
 
-        update_option( 'wp_puller_last_check', time() );
+        update_option( 'wp_puller_plugin_last_check', time() );
 
         return array(
             'update_available' => ! empty( $current_commit ) && $current_commit !== $latest_commit['sha'],
@@ -325,9 +326,9 @@ class WP_Puller_Plugin_Updater {
         }
 
         // Handle plugin in subdirectory
-        $theme_path = get_option( 'wp_puller_theme_path', '' );
-        if ( ! empty( $theme_path ) ) {
-            $extracted_dir = $extracted_dir . '/' . $theme_path;
+        $plugin_path = get_option( 'wp_puller_plugin_path', '' );
+        if ( ! empty( $plugin_path ) ) {
+            $extracted_dir = $extracted_dir . '/' . $plugin_path;
 
             if ( ! is_dir( $extracted_dir ) ) {
                 $wp_filesystem->delete( $temp_dir, true );
@@ -336,7 +337,7 @@ class WP_Puller_Plugin_Updater {
                     sprintf(
                         /* translators: %s: plugin path */
                         __( 'Plugin path "%s" not found in repository.', 'wp-puller' ),
-                        $theme_path
+                        $plugin_path
                     )
                 );
             }
@@ -512,13 +513,14 @@ class WP_Puller_Plugin_Updater {
      * @return array
      */
     public function get_status() {
-        $repo_url       = get_option( 'wp_puller_repo_url', '' );
-        $branch         = get_option( 'wp_puller_branch', 'main' );
-        $current_commit = get_option( 'wp_puller_latest_commit', '' );
-        $last_check     = get_option( 'wp_puller_last_check', 0 );
-        $auto_update    = get_option( 'wp_puller_auto_update', true );
-        $plugin_slug    = get_option( 'wp_puller_plugin_slug', '' );
-        $deployed_branch = get_option( 'wp_puller_deployed_branch', '' );
+        $repo_url        = get_option( 'wp_puller_plugin_repo_url', '' );
+        $branch          = get_option( 'wp_puller_plugin_branch', 'main' );
+        $current_commit  = get_option( 'wp_puller_plugin_latest_commit', '' );
+        $last_check      = get_option( 'wp_puller_plugin_last_check', 0 );
+        $auto_update     = get_option( 'wp_puller_plugin_auto_update', true );
+        $plugin_slug     = get_option( 'wp_puller_plugin_slug', '' );
+        $deployed_branch = get_option( 'wp_puller_plugin_deployed_branch', '' );
+        $plugin_path     = get_option( 'wp_puller_plugin_path', '' );
 
         $parsed = $this->github_api->parse_repo_url( $repo_url );
 
@@ -526,7 +528,7 @@ class WP_Puller_Plugin_Updater {
             'is_configured'   => ! empty( $repo_url ) && false !== $parsed && ! empty( $plugin_slug ),
             'repo_url'        => $repo_url,
             'branch'          => $branch,
-            'theme_path'      => get_option( 'wp_puller_theme_path', '' ),
+            'plugin_path'     => $plugin_path,
             'plugin_slug'     => $plugin_slug,
             'current_commit'  => $current_commit,
             'short_commit'    => ! empty( $current_commit ) ? substr( $current_commit, 0, 7 ) : '',
