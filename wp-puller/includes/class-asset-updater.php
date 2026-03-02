@@ -160,7 +160,11 @@ class WP_Puller_Asset_Updater {
             'last_check'    => time(),
         ) );
 
-        $this->logger->log_update_success( $latest_commit['short_sha'], $source, array_merge( $log_meta, array(
+        // Get the installed version from the asset's header (e.g. style.css or plugin PHP file).
+        $installed_info    = $this->get_current_info();
+        $installed_version = ! empty( $installed_info['version'] ) ? $installed_info['version'] : $latest_commit['short_sha'];
+
+        $this->logger->log_update_success( $installed_version, $source, array_merge( $log_meta, array(
             'commit_sha'     => $latest_commit['sha'],
             'commit_message' => substr( $latest_commit['message'], 0, 100 ),
         ) ) );
@@ -260,7 +264,11 @@ class WP_Puller_Asset_Updater {
             'deployed_commit'  => $latest_commit['sha'],
         ) );
 
-        $this->logger->log_update_success( $latest_commit['short_sha'], $source, array_merge( $log_meta, array(
+        // Get the installed version from the asset's header.
+        $installed_info    = $this->get_current_info();
+        $installed_version = ! empty( $installed_info['version'] ) ? $installed_info['version'] : $latest_commit['short_sha'];
+
+        $this->logger->log_update_success( $installed_version, $source, array_merge( $log_meta, array(
             'commit_sha'     => $latest_commit['sha'],
             'commit_message' => substr( $latest_commit['message'], 0, 100 ),
             'branch'         => $branch,

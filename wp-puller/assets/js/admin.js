@@ -559,12 +559,15 @@
             html += '<td class="wp-puller-branch-time">' + escapeHtml(timeAgo(b.date || b.timestamp)) + '</td>';
 
             // Actions column
+            var compareBase = deployed || configured || 'main';
             html += '<td class="wp-puller-branch-actions">';
             html += '<button class="button button-small wp-puller-deploy-branch" data-branch="' + escapeHtml(b.name) + '" title="Deploy this branch">Deploy</button> ';
             if (!isConfigured) {
                 html += '<button class="button button-small wp-puller-set-updates-branch" data-branch="' + escapeHtml(b.name) + '" title="Set as updates branch">Use for Updates</button> ';
             }
-            html += '<button class="button button-small wp-puller-compare-branch" data-branch="' + escapeHtml(b.name) + '" data-base="' + escapeHtml(configured || 'main') + '" title="Compare with updates branch">Compare</button>';
+            if (b.name !== compareBase) {
+                html += '<button class="button button-small wp-puller-compare-branch" data-branch="' + escapeHtml(b.name) + '" data-base="' + escapeHtml(compareBase) + '" title="Compare with ' + escapeHtml(compareBase) + '">Compare</button>';
+            }
             html += '</td>';
 
             html += '</tr>';
@@ -1161,10 +1164,17 @@
                 return;
             }
 
-            // Fallback for base branch
+            // Fallback for base branch: prefer deployed (what's actually running)
             if (!baseBranch) {
                 var asset = wpPuller.assets[assetId] || {};
                 baseBranch = asset.deployedBranch || asset.branch || 'main';
+            } else if (baseBranch === headBranch) {
+                // If base matches head, try the other branch as fallback
+                var asset2 = wpPuller.assets[assetId] || {};
+                var alt = (baseBranch === asset2.deployedBranch) ? asset2.branch : asset2.deployedBranch;
+                if (alt && alt !== headBranch) {
+                    baseBranch = alt;
+                }
             }
 
             if (headBranch === baseBranch) {
