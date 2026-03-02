@@ -68,6 +68,57 @@
     align-items: center;
 }
 
+.wp-puller-add-new-wrap {
+    position: relative;
+    display: inline-block;
+}
+
+#wp-puller-add-new-toggle .dashicons-arrow-down-alt2 {
+    font-size: 14px;
+    width: 14px;
+    height: 14px;
+    margin-left: 2px;
+    vertical-align: middle;
+}
+
+.wp-puller-add-new-dropdown {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    z-index: 100;
+    background: #fff;
+    border: 1px solid #c3c4c7;
+    border-radius: 4px;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+    margin-top: 4px;
+    min-width: 140px;
+}
+
+.wp-puller-add-new-option {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 8px 12px;
+    border: none;
+    background: none;
+    cursor: pointer;
+    font-size: 13px;
+    text-align: left;
+    color: #1d2327;
+}
+
+.wp-puller-add-new-option:hover {
+    background: #f0f0f1;
+}
+
+.wp-puller-add-new-option .dashicons {
+    font-size: 18px;
+    width: 18px;
+    height: 18px;
+    color: #646970;
+}
+
 /* ==========================================================================
    Version Badge
    ========================================================================== */

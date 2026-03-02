@@ -882,16 +882,33 @@
         });
 
         // -----------------------------------------------------------------
-        // Add New Asset
+        // Add New Asset (dropdown toggle + type selection)
         // -----------------------------------------------------------------
 
-        $(document).on('click', '#wp-puller-add-new', function(e) {
+        $(document).on('click', '#wp-puller-add-new-toggle', function(e) {
             e.preventDefault();
+            e.stopPropagation();
+            var $dropdown = $(this).siblings('.wp-puller-add-new-dropdown');
+            $dropdown.toggle();
+        });
+
+        // Close dropdown when clicking elsewhere
+        $(document).on('click', function() {
+            $('.wp-puller-add-new-dropdown').hide();
+        });
+
+        $(document).on('click', '.wp-puller-add-new-option', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
             var $btn = $(this);
-            setLoading($btn, true);
+            var type = $btn.data('type');
+            var $toggle = $('#wp-puller-add-new-toggle');
+
+            $('.wp-puller-add-new-dropdown').hide();
+            setLoading($toggle, true);
 
             doAjax('wp_puller_add_asset', {
-                type: 'plugin'
+                type: type
             }).done(function(response) {
                 if (response.success) {
                     showNotice(response.data.message || 'Asset added.', 'success');
@@ -900,10 +917,10 @@
                     }, 800);
                 } else {
                     showNotice(response.data.message || wpPuller.strings.error, 'error');
-                    setLoading($btn, false);
+                    setLoading($toggle, false);
                 }
             }).fail(function() {
-                setLoading($btn, false);
+                setLoading($toggle, false);
             });
         });
 

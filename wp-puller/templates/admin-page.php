@@ -24,10 +24,23 @@ $backup_class = $data['backup_class'];
             <span class="wp-puller-version">v<?php echo esc_html( WP_PULLER_VERSION ); ?></span>
         </h1>
         <div class="wp-puller-header-actions">
-            <button type="button" class="button button-primary" id="wp-puller-add-new">
-                <span class="dashicons dashicons-plus-alt2"></span>
-                <?php esc_html_e( 'Add New', 'wp-puller' ); ?>
-            </button>
+            <div class="wp-puller-add-new-wrap">
+                <button type="button" class="button button-primary" id="wp-puller-add-new-toggle">
+                    <span class="dashicons dashicons-plus-alt2"></span>
+                    <?php esc_html_e( 'Add New', 'wp-puller' ); ?>
+                    <span class="dashicons dashicons-arrow-down-alt2"></span>
+                </button>
+                <div class="wp-puller-add-new-dropdown" style="display: none;">
+                    <button type="button" class="wp-puller-add-new-option" data-type="plugin">
+                        <span class="dashicons dashicons-admin-plugins"></span>
+                        <?php esc_html_e( 'Plugin', 'wp-puller' ); ?>
+                    </button>
+                    <button type="button" class="wp-puller-add-new-option" data-type="theme">
+                        <span class="dashicons dashicons-admin-appearance"></span>
+                        <?php esc_html_e( 'Theme', 'wp-puller' ); ?>
+                    </button>
+                </div>
+            </div>
             <button type="button" class="button" id="wp-puller-check-all">
                 <span class="dashicons dashicons-search"></span>
                 <?php esc_html_e( 'Check All for Updates', 'wp-puller' ); ?>
