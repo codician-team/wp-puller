@@ -30,18 +30,11 @@ class WP_Puller_Webhook_Handler {
     const REST_ROUTE = '/webhook';
 
     /**
-     * Theme updater instance.
+     * Backup instance.
      *
-     * @var WP_Puller_Theme_Updater
+     * @var WP_Puller_Backup
      */
-    private $updater;
-
-    /**
-     * Plugin updater instance.
-     *
-     * @var WP_Puller_Plugin_Updater
-     */
-    private $plugin_updater;
+    private $backup;
 
     /**
      * Logger instance.
@@ -53,14 +46,12 @@ class WP_Puller_Webhook_Handler {
     /**
      * Constructor.
      *
-     * @param WP_Puller_Theme_Updater  $updater        Theme updater instance.
-     * @param WP_Puller_Plugin_Updater $plugin_updater Plugin updater instance.
-     * @param WP_Puller_Logger         $logger         Logger instance.
+     * @param WP_Puller_Backup $backup Backup instance.
+     * @param WP_Puller_Logger $logger Logger instance.
      */
-    public function __construct( $updater, $plugin_updater, $logger ) {
-        $this->updater        = $updater;
-        $this->plugin_updater = $plugin_updater;
-        $this->logger         = $logger;
+    public function __construct( $backup, $logger ) {
+        $this->backup = $backup;
+        $this->logger = $logger;
     }
 
     /**
@@ -181,8 +172,7 @@ class WP_Puller_Webhook_Handler {
     /**
      * Handle push event.
      *
-     * Checks the pushed repo/branch against both theme and plugin configurations,
-     * updating whichever matches.
+     * Iterates all configured assets and updates any that match the pushed repo/branch.
      *
      * @param array $payload Push event payload.
      * @return WP_REST_Response
@@ -198,84 +188,77 @@ class WP_Puller_Webhook_Handler {
             $commit_msg = $payload['head_commit']['message'];
         }
 
-        $github_api = new WP_Puller_GitHub_API();
-        $pushed_parsed = $github_api->parse_repo_url( $repo_url );
+        $api           = new WP_Puller_GitHub_API();
+        $pushed_parsed = $api->parse_repo_url( $repo_url );
 
-        $updated = array();
-
-        // Check theme configuration
-        $theme_repo_url = get_option( 'wp_puller_repo_url', '' );
-        $theme_branch   = get_option( 'wp_puller_branch', 'main' );
-        $theme_auto     = get_option( 'wp_puller_auto_update', true );
-        $theme_parsed   = $github_api->parse_repo_url( $theme_repo_url );
-
-        if ( $pushed_parsed && $theme_parsed
-            && strtolower( $pushed_parsed['owner'] ) === strtolower( $theme_parsed['owner'] )
-            && strtolower( $pushed_parsed['repo'] ) === strtolower( $theme_parsed['repo'] )
-            && $pushed_branch === $theme_branch
-        ) {
-            if ( $theme_auto ) {
-                $this->logger->log(
-                    sprintf(
-                        /* translators: %1$s: short commit SHA, %2$s: commit message excerpt */
-                        __( 'Processing theme push: %1$s - %2$s', 'wp-puller' ),
-                        substr( $commit_sha, 0, 7 ),
-                        substr( $commit_msg, 0, 50 )
-                    ),
-                    WP_Puller_Logger::STATUS_INFO,
-                    WP_Puller_Logger::SOURCE_WEBHOOK
-                );
-
-                $result = $this->updater->update( WP_Puller_Logger::SOURCE_WEBHOOK );
-                if ( is_wp_error( $result ) ) {
-                    $updated[] = 'theme: ' . $result->get_error_message();
-                } else {
-                    $updated[] = 'theme';
-                }
-            } else {
-                $this->logger->log(
-                    __( 'Theme push received but auto-update is disabled', 'wp-puller' ),
-                    WP_Puller_Logger::STATUS_INFO,
-                    WP_Puller_Logger::SOURCE_WEBHOOK
-                );
-            }
+        if ( ! $pushed_parsed ) {
+            return new WP_REST_Response(
+                array(
+                    'success' => false,
+                    'message' => 'Could not parse repository URL from payload.',
+                ),
+                400
+            );
         }
 
-        // Check plugin configuration
-        $plugin_repo_url = get_option( 'wp_puller_plugin_repo_url', '' );
-        $plugin_branch   = get_option( 'wp_puller_plugin_branch', 'main' );
-        $plugin_auto     = get_option( 'wp_puller_plugin_auto_update', true );
-        $plugin_parsed   = $github_api->parse_repo_url( $plugin_repo_url );
+        $assets  = WP_Puller::get_assets();
+        $updated = array();
 
-        if ( $pushed_parsed && $plugin_parsed
-            && strtolower( $pushed_parsed['owner'] ) === strtolower( $plugin_parsed['owner'] )
-            && strtolower( $pushed_parsed['repo'] ) === strtolower( $plugin_parsed['repo'] )
-            && $pushed_branch === $plugin_branch
-        ) {
-            if ( $plugin_auto ) {
+        foreach ( $assets as $asset_id => $config ) {
+            if ( empty( $config['repo_url'] ) || empty( $config['slug'] ) ) {
+                continue;
+            }
+
+            $asset_parsed = $api->parse_repo_url( $config['repo_url'] );
+
+            if ( ! $asset_parsed ) {
+                continue;
+            }
+
+            // Check if this push matches this asset's repo and branch.
+            $repo_match = strtolower( $pushed_parsed['owner'] ) === strtolower( $asset_parsed['owner'] )
+                && strtolower( $pushed_parsed['repo'] ) === strtolower( $asset_parsed['repo'] );
+
+            $branch_match = $pushed_branch === $config['branch'];
+
+            if ( ! $repo_match || ! $branch_match ) {
+                continue;
+            }
+
+            if ( empty( $config['auto_update'] ) ) {
                 $this->logger->log(
                     sprintf(
-                        /* translators: %1$s: short commit SHA, %2$s: commit message excerpt */
-                        __( 'Processing plugin push: %1$s - %2$s', 'wp-puller' ),
-                        substr( $commit_sha, 0, 7 ),
-                        substr( $commit_msg, 0, 50 )
+                        /* translators: %s: asset label/slug */
+                        __( 'Push matched "%s" but auto-update is disabled', 'wp-puller' ),
+                        $config['label'] ?: $config['slug']
                     ),
                     WP_Puller_Logger::STATUS_INFO,
                     WP_Puller_Logger::SOURCE_WEBHOOK
                 );
+                continue;
+            }
 
-                $result = $this->plugin_updater->update( WP_Puller_Logger::SOURCE_WEBHOOK );
-                if ( is_wp_error( $result ) ) {
-                    $updated[] = 'plugin: ' . $result->get_error_message();
-                } else {
-                    $updated[] = 'plugin';
-                }
+            $this->logger->log(
+                sprintf(
+                    /* translators: %1$s: asset label, %2$s: short commit SHA, %3$s: commit message */
+                    __( 'Processing push for "%1$s": %2$s - %3$s', 'wp-puller' ),
+                    $config['label'] ?: $config['slug'],
+                    substr( $commit_sha, 0, 7 ),
+                    substr( $commit_msg, 0, 50 )
+                ),
+                WP_Puller_Logger::STATUS_INFO,
+                WP_Puller_Logger::SOURCE_WEBHOOK
+            );
+
+            $github_api = WP_Puller::create_github_api( $config );
+            $updater    = new WP_Puller_Asset_Updater( $config, $github_api, $this->backup, $this->logger );
+
+            $result = $updater->update( WP_Puller_Logger::SOURCE_WEBHOOK );
+
+            if ( is_wp_error( $result ) ) {
+                $updated[] = $config['slug'] . ': ' . $result->get_error_message();
             } else {
-                $this->logger->log(
-                    __( 'Plugin push received but auto-update is disabled', 'wp-puller' ),
-                    WP_Puller_Logger::STATUS_INFO,
-                    WP_Puller_Logger::SOURCE_WEBHOOK
-                );
+                $updated[] = $config['slug'];
             }
         }
 

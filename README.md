@@ -1,180 +1,104 @@
-# WP Puller
+## WP Puller v2.0 — Multi-Asset Management
 
-Auto-update WordPress themes from GitHub. Free and open source.
+### What's New
 
-[![WordPress 5.0+](https://img.shields.io/badge/WordPress-5.0%2B-0073aa.svg)](https://wordpress.org/)
-[![PHP 7.4+](https://img.shields.io/badge/PHP-7.4%2B-777bb4.svg)](https://php.net/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+**Manage unlimited themes and plugins from GitHub — all from one screen.**
 
----
+WP Puller v2.0 is a ground-up rewrite. The old single-asset tabbed interface is gone, replaced by a card-based dashboard that lets you manage as many GitHub-connected themes and plugins as you need.
 
-Push to GitHub → Theme updates automatically. No FTP, no manual uploads.
-
-WP Puller connects your WordPress theme to a GitHub repository. When you push changes, a webhook triggers and your live site updates within seconds. Works with both public and private repositories.
-
-**This is the free alternative to WP Pusher and Git Updater.**
+Thanks to https://github.com/codician-team for building the original version!
 
 ---
 
-## What It Does
+### Multi-Asset Support
 
-- **Webhook-based deploys** - Push to GitHub, site updates automatically
-- **Private repo support** - Connect with a GitHub Personal Access Token
-- **Automatic backups** - Snapshot before every update, one-click restore
-- **Subdirectory themes** - Theme doesn't need to be at repo root
-- **Branch selection** - Deploy from main, staging, production, or any branch
+- Add **unlimited themes and plugins**, each with its own GitHub repo, branch, and settings
+- Each asset gets its own card showing name, version, commit, and connection status
+- Automatic migration from v1.x — your existing configuration carries over
 
----
+### Card-Based Admin Interface
 
-## Install
+- **Asset cards** in a responsive grid, each showing live status at a glance: version, current commit SHA, last check time, and connection state
+- **Slide-out panels** for Settings, Branches, and Backups — one click from each card's footer icons
+- **Bulk actions** in the header: Check All for Updates, Update All
+- **Confirmation modals** for destructive actions (restore, delete, deploy, remove)
+- **Notice bar** with auto-dismiss for success/error/warning feedback
 
-1. Download `wp-puller.zip` from [Releases](../../releases) or directly .zip the "wp-puller" folder in repository.
-2. WordPress admin → Plugins → Add New → Upload Plugin
-3. Upload ZIP, activate
+### Shared Token Management
 
-Or manually upload the `wp-puller` folder to `/wp-content/plugins/`.
+- Store multiple GitHub Personal Access Tokens in a shared, encrypted vault
+- Reuse the same token across multiple assets — no need to paste it again
+- Supports both fine-grained (`github_pat_`) and classic (`ghp_`) tokens
+- AES-256-CBC encryption at rest using WordPress security salts
+- Orphaned tokens auto-cleaned when the last asset using them is removed
 
----
+### Branch Management
 
-## Setup
+- **Branches panel** shows the 20 most recently active branches, sorted by commit date
+- Fetches all branches (up to 1000 via GraphQL, 500 via REST) then sorts by recency — no more alphabetical guessing
+- **Deploy** any branch for testing — backup created automatically before switching
+- **Use for Updates** — promote a tested branch to be the configured updates branch
+- **Compare** any branch against the deployed/configured branch: see commits ahead/behind, files changed with additions and deletions
+- Configured branch shows a green "updates" badge; deployed branch highlighted in the table
 
-### Connect a Repository
+### Webhook-Based Auto-Updates
 
-1. Go to **WP Puller** in the admin sidebar
-2. Enter your GitHub repo URL: `https://github.com/you/your-theme`
-3. Select branch (usually `main`)
-4. If your theme is in a subdirectory, enter the path (e.g., `theme/starter-theme`)
-5. Click **Test Connection**, then **Save Settings**
-6. Refreshing the page might be needed if you do not see the **Connected** indicator.
+- Single **global webhook endpoint** (`/wp-json/wp-puller/v1/webhook`) handles all assets
+- GitHub push events are matched to configured assets by repo URL and branch
+- HMAC-SHA256 signature verification with timing-safe comparison
+- Per-asset auto-update toggle — enable or disable webhook-triggered updates individually
+- **Webhook panel** accessible from the header with payload URL, secret, copy buttons, and step-by-step GitHub setup instructions
+- One-click secret regeneration
 
-### Set Up Webhook (for auto-updates)
+### Backup System
 
-1. Copy the **Payload URL** and **Secret** from WP Puller
-2. GitHub repo → Settings → Webhooks → Add webhook
-3. Paste the URL and secret
-4. Content type: `application/json`
-5. Events: Just the push event
-6. Save
+- Automatic backup before every update (manual or webhook)
+- Per-asset backup retention: 1–10 backups (configurable)
+- One-click **restore** from the Backups panel
+- Backup list shows name, creation date, file size, and detected version from asset headers
+- Manual delete with confirmation
 
-Now every push to your branch triggers an automatic update.
+### Activity Log
 
-### Manual Updates
+- Last 20 events displayed with status indicator, timestamp, and source
+- Logs show **asset name** and **semantic version** (e.g., "MyTheme updated successfully to 2.1.0")
+- Events logged: updates (success/failure), backups created, restores, webhook events, signature failures
+- Clear all logs with one click
 
-Don't want webhooks? Click **Check for Updates** then **Update Now** whenever you want to pull the latest.
+### Update Checking
 
----
+- Per-asset **Check for Updates** — shows current vs. latest version, commit SHAs, and update availability
+- Detects version from asset headers (style.css for themes, main PHP file for plugins)
+- **Check All** runs across every configured asset and displays results inline on each card
 
-## Private Repositories
+### Theme & Plugin Support
 
-For private repos, you need a GitHub Personal Access Token:
-
-### Fine-grained token (recommended)
-
-1. GitHub → Settings → Developer settings → Personal access tokens → Fine-grained tokens
-2. Generate new token
-3. Select only the repository you need
-4. Permissions: **Contents** (read) and **Metadata** (read)
-5. Generate, copy, paste into WP Puller
-
-### Classic token
-
-1. GitHub → Settings → Developer settings → Personal access tokens → Tokens (classic)
-2. Generate new token
-3. Select `repo` scope
-4. Generate, copy, paste into WP Puller
-
-Your token is encrypted with AES-256-CBC before storage.
-
----
-
-## Repository Structure
-
-Theme files can be at the root:
-
-```
-your-repo/
-├── style.css
-├── functions.php
-├── index.php
-└── ...
-```
-
-Or in a subdirectory (set "Theme Path" in settings):
-
-```
-your-repo/
-├── other-stuff/
-└── theme/starter-theme/    ← Theme Path: theme/starter-theme
-    ├── style.css
-    ├── functions.php
-    └── ...
-```
-
-The theme needs a valid `style.css` with a `Theme Name` header.
-
----
-
-## FAQ
-
-**Is this actually free?**
-Yes. MIT license, no premium tier, no feature gates.
-
-**How does it compare to WP Pusher?**
-Same core idea—deploy WordPress themes from GitHub. WP Puller is free and open source. WP Pusher has more features (plugins, GitLab, Bitbucket) but costs money.
-
-**What if an update breaks my site?**
-Restore from the Backups section. WP Puller keeps automatic backups before every update.
-
-**Can I use this for plugins?**
-Not yet. Theme-only for now.
-
-**Does it work with GitLab/Bitbucket?**
-GitHub only.
-
-**Is my token secure?**
-Encrypted at rest using your WordPress security salts. Never logged or transmitted except to GitHub.
-
----
-
-## For Developers
-
-### Hooks
-
-```php
-// After successful update
-do_action( 'wp_puller_theme_updated', $commit_data, $source );
-
-// After backup restore
-do_action( 'wp_puller_theme_restored', $backup_name );
-
-// On init
-do_action( 'wp_puller_init' );
-```
+- **Themes**: validates `style.css` with Theme Name header, detects active theme
+- **Plugins**: scans PHP files for Plugin Name header, checks active status
+- **Subdirectory support**: set a path within the repo if the asset lives in a subfolder
+- Archive validation before install — helpful error messages if structure is wrong
 
 ### Security
 
-- Nonce verification on all AJAX
-- `manage_options` capability required
-- Webhook signatures verified (HMAC SHA-256)
-- Tokens encrypted with AES-256-CBC
-- All file operations via WP_Filesystem
+- All AJAX endpoints protected by WordPress nonces and `manage_options` capability checks
+- Webhook signatures verified with HMAC-SHA256
+- Tokens encrypted at rest, decrypted only on demand
+- File operations use WordPress Filesystem API
+- Backup directory protected with `.htaccess`
 
 ---
 
-## Requirements
+### Requirements
 
 - WordPress 5.0+
-- PHP 7.4+
-- OpenSSL extension (for token encryption)
+- PHP 7.4+ with OpenSSL
+- Writable `/wp-content/` directory
+- GitHub PAT for private repositories (public repos work without one)
 
 ---
 
-## Contributing
+### Upgrade Notes
 
-Issues and PRs welcome. Fork it, make changes, submit a PR.
-
----
-
-## License
-
-MIT. Do whatever you want with it.
+- **From v1.x**: Activate the updated plugin — your single-asset configuration will be automatically migrated to the new multi-asset format. No manual steps required.
+- **Webhook URL unchanged**: If you already have a GitHub webhook configured, it will continue working.
+- **Token re-encryption**: Your existing PAT will be migrated into the new encrypted token vault.

@@ -89,16 +89,24 @@ class WP_Puller_Logger {
     public function log_update_success( $version, $source = self::SOURCE_MANUAL, $meta = array() ) {
         $meta['version'] = $version;
 
-        return $this->log(
-            sprintf(
-                /* translators: %s: version/commit identifier */
-                __( 'Theme updated successfully to %s', 'wp-puller' ),
+        $label = ! empty( $meta['asset_label'] ) ? $meta['asset_label'] : ( ! empty( $meta['asset_slug'] ) ? $meta['asset_slug'] : '' );
+
+        if ( ! empty( $label ) ) {
+            $message = sprintf(
+                /* translators: %1$s: asset name, %2$s: version/commit identifier */
+                __( '%1$s updated successfully to %2$s', 'wp-puller' ),
+                $label,
                 $version
-            ),
-            self::STATUS_SUCCESS,
-            $source,
-            $meta
-        );
+            );
+        } else {
+            $message = sprintf(
+                /* translators: %s: version/commit identifier */
+                __( 'Updated successfully to %s', 'wp-puller' ),
+                $version
+            );
+        }
+
+        return $this->log( $message, self::STATUS_SUCCESS, $source, $meta );
     }
 
     /**
@@ -112,16 +120,24 @@ class WP_Puller_Logger {
     public function log_update_error( $error, $source = self::SOURCE_MANUAL, $meta = array() ) {
         $meta['error'] = $error;
 
-        return $this->log(
-            sprintf(
-                /* translators: %s: error message */
-                __( 'Theme update failed: %s', 'wp-puller' ),
+        $label = ! empty( $meta['asset_label'] ) ? $meta['asset_label'] : ( ! empty( $meta['asset_slug'] ) ? $meta['asset_slug'] : '' );
+
+        if ( ! empty( $label ) ) {
+            $message = sprintf(
+                /* translators: %1$s: asset name, %2$s: error message */
+                __( '%1$s update failed: %2$s', 'wp-puller' ),
+                $label,
                 $error
-            ),
-            self::STATUS_ERROR,
-            $source,
-            $meta
-        );
+            );
+        } else {
+            $message = sprintf(
+                /* translators: %s: error message */
+                __( 'Update failed: %s', 'wp-puller' ),
+                $error
+            );
+        }
+
+        return $this->log( $message, self::STATUS_ERROR, $source, $meta );
     }
 
     /**
@@ -130,13 +146,21 @@ class WP_Puller_Logger {
      * @param string $backup_path Path to backup.
      * @return bool
      */
-    public function log_backup_created( $backup_path ) {
-        return $this->log(
-            __( 'Theme backup created', 'wp-puller' ),
-            self::STATUS_INFO,
-            self::SOURCE_SYSTEM,
-            array( 'backup_path' => $backup_path )
-        );
+    public function log_backup_created( $backup_path, $meta = array() ) {
+        $meta['backup_path'] = $backup_path;
+        $label = ! empty( $meta['asset_label'] ) ? $meta['asset_label'] : ( ! empty( $meta['asset_slug'] ) ? $meta['asset_slug'] : '' );
+
+        if ( ! empty( $label ) ) {
+            $message = sprintf(
+                /* translators: %s: asset name */
+                __( 'Backup created for %s', 'wp-puller' ),
+                $label
+            );
+        } else {
+            $message = __( 'Backup created', 'wp-puller' );
+        }
+
+        return $this->log( $message, self::STATUS_INFO, self::SOURCE_SYSTEM, $meta );
     }
 
     /**
@@ -145,17 +169,26 @@ class WP_Puller_Logger {
      * @param string $backup_name Name of restored backup.
      * @return bool
      */
-    public function log_restore_success( $backup_name ) {
-        return $this->log(
-            sprintf(
-                /* translators: %s: backup name */
-                __( 'Theme restored from backup: %s', 'wp-puller' ),
+    public function log_restore_success( $backup_name, $meta = array() ) {
+        $meta['backup_name'] = $backup_name;
+        $label = ! empty( $meta['asset_label'] ) ? $meta['asset_label'] : ( ! empty( $meta['asset_slug'] ) ? $meta['asset_slug'] : '' );
+
+        if ( ! empty( $label ) ) {
+            $message = sprintf(
+                /* translators: %1$s: asset name, %2$s: backup name */
+                __( '%1$s restored from backup: %2$s', 'wp-puller' ),
+                $label,
                 $backup_name
-            ),
-            self::STATUS_SUCCESS,
-            self::SOURCE_MANUAL,
-            array( 'backup_name' => $backup_name )
-        );
+            );
+        } else {
+            $message = sprintf(
+                /* translators: %s: backup name */
+                __( 'Restored from backup: %s', 'wp-puller' ),
+                $backup_name
+            );
+        }
+
+        return $this->log( $message, self::STATUS_SUCCESS, self::SOURCE_MANUAL, $meta );
     }
 
     /**

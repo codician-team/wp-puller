@@ -16,27 +16,6 @@ if ( ! defined( 'ABSPATH' ) ) {
 class WP_Puller_Admin {
 
     /**
-     * GitHub API instance.
-     *
-     * @var WP_Puller_GitHub_API
-     */
-    private $github_api;
-
-    /**
-     * Theme updater instance.
-     *
-     * @var WP_Puller_Theme_Updater
-     */
-    private $updater;
-
-    /**
-     * Plugin updater instance.
-     *
-     * @var WP_Puller_Plugin_Updater
-     */
-    private $plugin_updater;
-
-    /**
      * Backup instance.
      *
      * @var WP_Puller_Backup
@@ -53,64 +32,65 @@ class WP_Puller_Admin {
     /**
      * Constructor.
      *
-     * @param WP_Puller_GitHub_API     $github_api     GitHub API instance.
-     * @param WP_Puller_Theme_Updater  $updater        Theme updater instance.
-     * @param WP_Puller_Plugin_Updater $plugin_updater Plugin updater instance.
-     * @param WP_Puller_Backup         $backup         Backup instance.
-     * @param WP_Puller_Logger         $logger         Logger instance.
+     * @param WP_Puller_Backup $backup Backup instance.
+     * @param WP_Puller_Logger $logger Logger instance.
      */
-    public function __construct( $github_api, $updater, $plugin_updater, $backup, $logger ) {
-        $this->github_api     = $github_api;
-        $this->updater        = $updater;
-        $this->plugin_updater = $plugin_updater;
-        $this->backup         = $backup;
-        $this->logger         = $logger;
+    public function __construct( $backup, $logger ) {
+        $this->backup = $backup;
+        $this->logger = $logger;
 
-        $this->init_hooks();
-    }
-
-    /**
-     * Initialize hooks.
-     */
-    private function init_hooks() {
         add_action( 'admin_menu', array( $this, 'add_admin_menu' ) );
-        add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_assets' ) );
+        add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_scripts' ) );
 
+        // Asset management.
+        add_action( 'wp_ajax_wp_puller_add_asset', array( $this, 'ajax_add_asset' ) );
+        add_action( 'wp_ajax_wp_puller_remove_asset', array( $this, 'ajax_remove_asset' ) );
         add_action( 'wp_ajax_wp_puller_save_settings', array( $this, 'ajax_save_settings' ) );
-        add_action( 'wp_ajax_wp_puller_test_connection', array( $this, 'ajax_test_connection' ) );
+
+        // Update actions.
         add_action( 'wp_ajax_wp_puller_check_updates', array( $this, 'ajax_check_updates' ) );
-        add_action( 'wp_ajax_wp_puller_update_theme', array( $this, 'ajax_update_theme' ) );
-        add_action( 'wp_ajax_wp_puller_restore_backup', array( $this, 'ajax_restore_backup' ) );
-        add_action( 'wp_ajax_wp_puller_delete_backup', array( $this, 'ajax_delete_backup' ) );
-        add_action( 'wp_ajax_wp_puller_regenerate_secret', array( $this, 'ajax_regenerate_secret' ) );
-        add_action( 'wp_ajax_wp_puller_clear_logs', array( $this, 'ajax_clear_logs' ) );
+        add_action( 'wp_ajax_wp_puller_update_asset', array( $this, 'ajax_update_asset' ) );
+        add_action( 'wp_ajax_wp_puller_check_all', array( $this, 'ajax_check_all' ) );
+        add_action( 'wp_ajax_wp_puller_update_all', array( $this, 'ajax_update_all' ) );
+
+        // Branch testing.
         add_action( 'wp_ajax_wp_puller_deploy_branch', array( $this, 'ajax_deploy_branch' ) );
         add_action( 'wp_ajax_wp_puller_get_branches_with_info', array( $this, 'ajax_get_branches_with_info' ) );
         add_action( 'wp_ajax_wp_puller_compare_branches', array( $this, 'ajax_compare_branches' ) );
+
+        // Backups.
+        add_action( 'wp_ajax_wp_puller_restore_backup', array( $this, 'ajax_restore_backup' ) );
+        add_action( 'wp_ajax_wp_puller_delete_backup', array( $this, 'ajax_delete_backup' ) );
+
+        // Branch configuration.
+        add_action( 'wp_ajax_wp_puller_set_updates_branch', array( $this, 'ajax_set_updates_branch' ) );
+
+        // Shared.
+        add_action( 'wp_ajax_wp_puller_test_connection', array( $this, 'ajax_test_connection' ) );
+        add_action( 'wp_ajax_wp_puller_regenerate_secret', array( $this, 'ajax_regenerate_secret' ) );
+        add_action( 'wp_ajax_wp_puller_clear_logs', array( $this, 'ajax_clear_logs' ) );
     }
 
     /**
-     * Add admin menu.
+     * Add admin menu page.
      */
     public function add_admin_menu() {
-        add_menu_page(
+        add_management_page(
             __( 'WP Puller', 'wp-puller' ),
             __( 'WP Puller', 'wp-puller' ),
             'manage_options',
             'wp-puller',
-            array( $this, 'render_admin_page' ),
-            'dashicons-update',
-            80
+            array( $this, 'render_admin_page' )
         );
     }
 
     /**
-     * Enqueue admin assets.
+     * Enqueue admin scripts and styles.
      *
      * @param string $hook Current admin page hook.
      */
-    public function enqueue_assets( $hook ) {
-        if ( 'toplevel_page_wp-puller' !== $hook ) {
+    public function enqueue_scripts( $hook ) {
+        if ( 'tools_page_wp-puller' !== $hook ) {
             return;
         }
 
@@ -129,578 +109,747 @@ class WP_Puller_Admin {
             true
         );
 
+        $assets = WP_Puller::get_assets();
+        $tokens = WP_Puller::get_tokens();
+
+        // Build tokens list for dropdown (masked).
+        $token_list = array();
+        foreach ( $tokens as $tok_id => $tok ) {
+            $asset_names = array();
+            foreach ( $assets as $a ) {
+                if ( ! empty( $a['token_id'] ) && $a['token_id'] === $tok_id ) {
+                    $asset_names[] = $a['label'] ?: $a['slug'];
+                }
+            }
+            $token_list[] = array(
+                'id'      => $tok_id,
+                'label'   => $tok['label'],
+                'used_by' => $asset_names,
+            );
+        }
+
+        // Build asset data for JS.
+        $js_assets = array();
+        foreach ( $assets as $id => $config ) {
+            $github_api = WP_Puller::create_github_api( $config );
+            $updater    = new WP_Puller_Asset_Updater( $config, $github_api, $this->backup, $this->logger );
+            $info       = $updater->get_current_info();
+            $status     = $updater->get_status();
+
+            $js_assets[ $id ] = array(
+                'id'             => $id,
+                'type'           => $config['type'],
+                'label'          => $config['label'],
+                'slug'           => $config['slug'],
+                'token_id'       => $config['token_id'],
+                'info'           => $info,
+                'status'         => $status,
+                'branch'         => $config['branch'],
+                'deployedBranch' => $config['deployed_branch'],
+            );
+        }
+
         wp_localize_script( 'wp-puller-admin', 'wpPuller', array(
-            'ajaxUrl'  => admin_url( 'admin-ajax.php' ),
-            'nonce'    => wp_create_nonce( 'wp_puller_nonce' ),
-            'strings'  => array(
-                'saving'           => __( 'Saving...', 'wp-puller' ),
-                'saved'            => __( 'Settings saved!', 'wp-puller' ),
-                'testing'          => __( 'Testing connection...', 'wp-puller' ),
-                'connected'        => __( 'Connected successfully!', 'wp-puller' ),
-                'checking'         => __( 'Checking for updates...', 'wp-puller' ),
-                'updating'         => __( 'Updating...', 'wp-puller' ),
-                'updated'          => __( 'Updated successfully!', 'wp-puller' ),
-                'restoring'        => __( 'Restoring backup...', 'wp-puller' ),
-                'restored'         => __( 'Backup restored successfully!', 'wp-puller' ),
-                'deleting'         => __( 'Deleting backup...', 'wp-puller' ),
-                'deleted'          => __( 'Backup deleted!', 'wp-puller' ),
-                'regenerating'     => __( 'Regenerating secret...', 'wp-puller' ),
-                'regenerated'      => __( 'Secret regenerated!', 'wp-puller' ),
-                'error'            => __( 'An error occurred.', 'wp-puller' ),
-                'confirmRestore'   => __( 'Are you sure you want to restore this backup? Your current files will be replaced.', 'wp-puller' ),
-                'confirmDelete'    => __( 'Are you sure you want to delete this backup?', 'wp-puller' ),
-                'confirmRegenerate'=> __( 'Are you sure? You will need to update the secret in GitHub.', 'wp-puller' ),
-                'deployingBranch'     => __( 'Deploying branch...', 'wp-puller' ),
-                'branchDeployed'      => __( 'Branch deployed successfully!', 'wp-puller' ),
+            'ajaxUrl'     => admin_url( 'admin-ajax.php' ),
+            'nonce'       => wp_create_nonce( 'wp_puller_nonce' ),
+            'assets'      => $js_assets,
+            'tokens'      => $token_list,
+            'webhookInfo' => WP_Puller_Webhook_Handler::get_setup_instructions(),
+            'strings'     => array(
+                'error'               => __( 'An error occurred. Please try again.', 'wp-puller' ),
+                'connected'           => __( 'Connection successful!', 'wp-puller' ),
+                'saved'               => __( 'Settings saved.', 'wp-puller' ),
+                'confirmRestore'      => __( 'Are you sure you want to restore this backup? Current files will be overwritten.', 'wp-puller' ),
+                'confirmDelete'       => __( 'Are you sure you want to delete this backup?', 'wp-puller' ),
+                'confirmRemove'       => __( 'Are you sure you want to remove this item? This cannot be undone.', 'wp-puller' ),
+                'confirmUpdateAll'    => __( 'Update all items? A backup will be created before each update.', 'wp-puller' ),
                 'confirmBranchDeploy' => __( 'Deploy this branch? A backup will be created first.', 'wp-puller' ),
-                'comparing'           => __( 'Comparing branches...', 'wp-puller' ),
+                'restored'            => __( 'Backup restored successfully.', 'wp-puller' ),
+                'deleted'             => __( 'Backup deleted.', 'wp-puller' ),
+                'regenerated'         => __( 'Webhook secret regenerated. Update your GitHub webhook settings.', 'wp-puller' ),
                 'noChanges'           => __( 'No changes between these branches.', 'wp-puller' ),
-            ),
-            'theme'  => array(
-                'branch'         => get_option( 'wp_puller_branch', 'main' ),
-                'deployedBranch' => get_option( 'wp_puller_deployed_branch', '' ),
-            ),
-            'plugin' => array(
-                'branch'         => get_option( 'wp_puller_plugin_branch', 'main' ),
-                'deployedBranch' => get_option( 'wp_puller_plugin_deployed_branch', '' ),
+                'confirmSetBranch'    => __( 'Set this as the updates branch? Future updates and webhooks will track this branch.', 'wp-puller' ),
             ),
         ) );
     }
 
     /**
-     * Render admin page.
+     * Render the admin page.
      */
     public function render_admin_page() {
-        if ( ! current_user_can( 'manage_options' ) ) {
-            wp_die( esc_html__( 'You do not have permission to access this page.', 'wp-puller' ) );
+        $assets       = WP_Puller::get_assets();
+        $tokens       = WP_Puller::get_tokens();
+        $webhook_info = WP_Puller_Webhook_Handler::get_setup_instructions();
+        $logs         = $this->logger->get_logs();
+
+        // Build per-asset data for the template.
+        $asset_data = array();
+        foreach ( $assets as $id => $config ) {
+            $github_api = WP_Puller::create_github_api( $config );
+            $updater    = new WP_Puller_Asset_Updater( $config, $github_api, $this->backup, $this->logger );
+            $info       = $updater->get_current_info();
+            $status     = $updater->get_status();
+
+            // Get backups for this asset.
+            $backup_prefix = ( 'plugin' === $config['type'] ) ? 'plugin_' . $config['slug'] : $config['slug'];
+            $backups       = ! empty( $config['slug'] ) ? $this->backup->get_backups( $backup_prefix ) : array();
+
+            $asset_data[ $id ] = array(
+                'config'  => $config,
+                'info'    => $info,
+                'status'  => $status,
+                'backups' => $backups,
+            );
         }
-
-        $theme_status  = $this->updater->get_status();
-        $plugin_status = $this->plugin_updater->get_status();
-        $plugin_info   = $this->plugin_updater->get_current_plugin_info();
-        $plugin_slug   = get_option( 'wp_puller_plugin_slug', '' );
-
-        $theme_backups  = $this->backup->get_backups( wp_get_theme()->get_stylesheet() );
-        $plugin_backups = ! empty( $plugin_slug ) ? $this->backup->get_backups( 'plugin_' . $plugin_slug ) : array();
 
         $data = array(
-            'theme_status'   => $theme_status,
-            'plugin_status'  => $plugin_status,
-            'theme_info'     => $this->updater->get_current_theme_info(),
-            'plugin_info'    => $plugin_info,
-            'webhook_info'   => WP_Puller_Webhook_Handler::get_setup_instructions(),
-            'theme_backups'  => $theme_backups,
-            'plugin_backups' => $plugin_backups,
-            'logs'           => $this->logger->get_recent_logs( 10 ),
-            'backup_class'   => $this->backup,
+            'assets'       => $asset_data,
+            'tokens'       => $tokens,
+            'webhook_info' => $webhook_info,
+            'logs'         => $logs,
+            'backup_class' => $this->backup,
         );
 
-        include WP_PULLER_PLUGIN_DIR . 'templates/admin-page.php';
+        require WP_PULLER_PLUGIN_DIR . 'templates/admin-page.php';
     }
 
-    /**
-     * Get asset_type from the current AJAX request.
-     *
-     * @return string 'theme' or 'plugin'.
-     */
-    private function get_request_asset_type() {
-        $asset_type = isset( $_POST['asset_type'] ) ? sanitize_text_field( wp_unslash( $_POST['asset_type'] ) ) : 'theme';
-        if ( ! in_array( $asset_type, array( 'theme', 'plugin' ), true ) ) {
-            $asset_type = 'theme';
-        }
-        return $asset_type;
-    }
+    // =========================================================================
+    // AJAX: Asset Management
+    // =========================================================================
 
     /**
-     * AJAX: Save settings.
+     * Add a new asset.
      */
-    public function ajax_save_settings() {
-        $this->verify_ajax_request();
+    public function ajax_add_asset() {
+        $this->verify_ajax();
 
-        $asset_type   = $this->get_request_asset_type();
-        $repo_url     = isset( $_POST['repo_url'] ) ? esc_url_raw( wp_unslash( $_POST['repo_url'] ) ) : '';
-        $branch       = isset( $_POST['branch'] ) ? sanitize_text_field( wp_unslash( $_POST['branch'] ) ) : 'main';
-        $path         = isset( $_POST['path'] ) ? sanitize_text_field( wp_unslash( $_POST['path'] ) ) : '';
-        $pat          = isset( $_POST['pat'] ) ? sanitize_text_field( wp_unslash( $_POST['pat'] ) ) : '';
-        $auto_update  = isset( $_POST['auto_update'] ) && 'true' === $_POST['auto_update'];
-        $backup_count = isset( $_POST['backup_count'] ) ? absint( $_POST['backup_count'] ) : 3;
-
-        // Clean up path - remove leading/trailing slashes
-        $path = trim( $path, '/' );
-
-        // Shared options
-        update_option( 'wp_puller_backup_count', max( 1, min( 10, $backup_count ) ) );
-
-        if ( ! empty( $pat ) && '*****' !== substr( $pat, 0, 5 ) ) {
-            update_option( 'wp_puller_pat', WP_Puller::encrypt( $pat ) );
+        $type = sanitize_text_field( wp_unslash( $_POST['type'] ?? 'plugin' ) );
+        if ( ! in_array( $type, array( 'theme', 'plugin' ), true ) ) {
+            $type = 'plugin';
         }
 
-        if ( 'plugin' === $asset_type ) {
-            $plugin_slug = isset( $_POST['plugin_slug'] ) ? sanitize_file_name( wp_unslash( $_POST['plugin_slug'] ) ) : '';
+        $asset_id = 'asset_' . wp_generate_password( 12, false );
+        $assets   = WP_Puller::get_assets();
 
-            update_option( 'wp_puller_plugin_repo_url', $repo_url );
-            update_option( 'wp_puller_plugin_branch', $branch );
-            update_option( 'wp_puller_plugin_path', $path );
-            update_option( 'wp_puller_plugin_slug', $plugin_slug );
-            update_option( 'wp_puller_plugin_auto_update', $auto_update );
-        } else {
-            update_option( 'wp_puller_repo_url', $repo_url );
-            update_option( 'wp_puller_branch', $branch );
-            update_option( 'wp_puller_theme_path', $path );
-            update_option( 'wp_puller_auto_update', $auto_update );
-        }
-
-        $this->github_api->clear_cache();
-
-        $this->logger->log(
-            sprintf(
-                /* translators: %s: asset type */
-                __( '%s settings updated', 'wp-puller' ),
-                ucfirst( $asset_type )
-            ),
-            WP_Puller_Logger::STATUS_INFO,
-            WP_Puller_Logger::SOURCE_MANUAL
+        $assets[ $asset_id ] = array(
+            'id'               => $asset_id,
+            'type'             => $type,
+            'label'            => '',
+            'repo_url'         => '',
+            'branch'           => 'main',
+            'path'             => '',
+            'slug'             => '',
+            'auto_update'      => true,
+            'backup_count'     => 3,
+            'token_id'         => '',
+            'latest_commit'    => '',
+            'last_check'       => 0,
+            'deployed_branch'  => '',
+            'deployed_commit'  => '',
         );
 
-        // Return updated status so JS can refresh the UI
-        $status = ( 'plugin' === $asset_type )
-            ? $this->plugin_updater->get_status()
-            : $this->updater->get_status();
-
-        $response = array(
-            'message' => __( 'Settings saved successfully.', 'wp-puller' ),
-            'status'  => $status,
-        );
-
-        if ( 'plugin' === $asset_type ) {
-            $response['plugin_info'] = $this->plugin_updater->get_current_plugin_info();
-        } else {
-            $response['theme_info'] = $this->updater->get_current_theme_info();
-        }
-
-        wp_send_json_success( $response );
-    }
-
-    /**
-     * AJAX: Test connection.
-     */
-    public function ajax_test_connection() {
-        $this->verify_ajax_request();
-
-        $repo_url = isset( $_POST['repo_url'] ) ? esc_url_raw( wp_unslash( $_POST['repo_url'] ) ) : '';
-
-        if ( empty( $repo_url ) ) {
-            wp_send_json_error( array(
-                'message' => __( 'Please enter a repository URL.', 'wp-puller' ),
-            ) );
-        }
-
-        $result = $this->github_api->test_connection( $repo_url );
-
-        if ( is_wp_error( $result ) ) {
-            wp_send_json_error( array(
-                'message' => $result->get_error_message(),
-            ) );
-        }
-
-        $repo_info = array(
-            'name'        => isset( $result['name'] ) ? $result['name'] : '',
-            'full_name'   => isset( $result['full_name'] ) ? $result['full_name'] : '',
-            'description' => isset( $result['description'] ) ? $result['description'] : '',
-            'private'     => isset( $result['private'] ) ? $result['private'] : false,
-            'default_branch' => isset( $result['default_branch'] ) ? $result['default_branch'] : 'main',
-        );
+        update_option( 'wp_puller_assets', $assets );
 
         wp_send_json_success( array(
-            'message' => __( 'Connection successful!', 'wp-puller' ),
-            'repo'    => $repo_info,
+            'message'  => __( 'Item added. Configure its settings.', 'wp-puller' ),
+            'asset_id' => $asset_id,
         ) );
     }
 
     /**
-     * AJAX: Check for updates.
+     * Remove an asset.
      */
-    public function ajax_check_updates() {
-        $this->verify_ajax_request();
+    public function ajax_remove_asset() {
+        $this->verify_ajax();
 
-        $asset_type = $this->get_request_asset_type();
+        $asset_id = sanitize_text_field( wp_unslash( $_POST['asset_id'] ?? '' ) );
+        $assets   = WP_Puller::get_assets();
 
-        if ( 'plugin' === $asset_type ) {
-            $result = $this->plugin_updater->check_for_updates();
-        } else {
-            $result = $this->updater->check_for_updates();
+        if ( ! isset( $assets[ $asset_id ] ) ) {
+            wp_send_json_error( array( 'message' => __( 'Asset not found.', 'wp-puller' ) ) );
         }
 
+        $removed_token_id = $assets[ $asset_id ]['token_id'];
+        unset( $assets[ $asset_id ] );
+        update_option( 'wp_puller_assets', $assets );
+
+        // Clean up orphaned token.
+        if ( ! empty( $removed_token_id ) ) {
+            $still_used = false;
+            foreach ( $assets as $a ) {
+                if ( $a['token_id'] === $removed_token_id ) {
+                    $still_used = true;
+                    break;
+                }
+            }
+            if ( ! $still_used ) {
+                $tokens = WP_Puller::get_tokens();
+                unset( $tokens[ $removed_token_id ] );
+                update_option( 'wp_puller_tokens', $tokens );
+            }
+        }
+
+        wp_send_json_success( array( 'message' => __( 'Item removed.', 'wp-puller' ) ) );
+    }
+
+    /**
+     * Save settings for an asset.
+     */
+    public function ajax_save_settings() {
+        $this->verify_ajax();
+
+        $asset_id = sanitize_text_field( wp_unslash( $_POST['asset_id'] ?? '' ) );
+        $assets   = WP_Puller::get_assets();
+
+        if ( ! isset( $assets[ $asset_id ] ) ) {
+            wp_send_json_error( array( 'message' => __( 'Asset not found.', 'wp-puller' ) ) );
+        }
+
+        $config = $assets[ $asset_id ];
+
+        $config['repo_url']     = esc_url_raw( wp_unslash( $_POST['repo_url'] ?? '' ) );
+        $config['branch']       = sanitize_text_field( wp_unslash( $_POST['branch'] ?? 'main' ) );
+        $config['slug']         = sanitize_file_name( wp_unslash( $_POST['slug'] ?? '' ) );
+        $config['path']         = sanitize_text_field( wp_unslash( $_POST['path'] ?? '' ) );
+        $config['type']         = in_array( $_POST['type'] ?? '', array( 'theme', 'plugin' ), true )
+            ? sanitize_text_field( $_POST['type'] )
+            : $config['type'];
+        $config['auto_update']  = ( $_POST['auto_update'] ?? '' ) === 'true';
+        $config['backup_count'] = max( 1, min( 10, absint( $_POST['backup_count'] ?? 3 ) ) );
+
+        // Handle PAT / token.
+        $pat_value      = wp_unslash( $_POST['pat'] ?? '' );
+        $reuse_token_id = sanitize_text_field( wp_unslash( $_POST['reuse_token_id'] ?? '' ) );
+
+        if ( ! empty( $reuse_token_id ) && 'new' !== $reuse_token_id ) {
+            // Reuse existing token.
+            $config['token_id'] = $reuse_token_id;
+        } elseif ( ! empty( $pat_value ) && ! $this->is_masked_value( $pat_value ) ) {
+            // New token entered.
+            $token_id  = 'tok_' . wp_generate_password( 12, false );
+            $encrypted = WP_Puller::encrypt( $pat_value );
+            $label     = $this->generate_token_label( $pat_value );
+
+            $tokens = WP_Puller::get_tokens();
+            $tokens[ $token_id ] = array(
+                'id'        => $token_id,
+                'label'     => $label,
+                'encrypted' => $encrypted,
+            );
+            update_option( 'wp_puller_tokens', $tokens );
+
+            $config['token_id'] = $token_id;
+        }
+
+        // Auto-detect label from installed asset.
+        if ( empty( $config['label'] ) && ! empty( $config['slug'] ) ) {
+            $github_api = WP_Puller::create_github_api( $config );
+            $updater    = new WP_Puller_Asset_Updater( $config, $github_api, $this->backup, $this->logger );
+            $info       = $updater->get_current_info();
+            if ( ! empty( $info['name'] ) && $info['name'] !== $config['slug'] ) {
+                $config['label'] = $info['name'];
+            }
+        }
+
+        $assets[ $asset_id ] = $config;
+        update_option( 'wp_puller_assets', $assets );
+
+        // Return updated status.
+        $github_api = WP_Puller::create_github_api( $config );
+        $updater    = new WP_Puller_Asset_Updater( $config, $github_api, $this->backup, $this->logger );
+        $status     = $updater->get_status();
+        $info       = $updater->get_current_info();
+
+        wp_send_json_success( array(
+            'message' => __( 'Settings saved.', 'wp-puller' ),
+            'status'  => $status,
+            'info'    => $info,
+        ) );
+    }
+
+    // =========================================================================
+    // AJAX: Updates
+    // =========================================================================
+
+    /**
+     * Check for updates on a single asset.
+     */
+    public function ajax_check_updates() {
+        $this->verify_ajax();
+
+        $asset_id = sanitize_text_field( wp_unslash( $_POST['asset_id'] ?? '' ) );
+        $updater  = $this->get_updater( $asset_id );
+
+        if ( is_wp_error( $updater ) ) {
+            wp_send_json_error( array( 'message' => $updater->get_error_message() ) );
+        }
+
+        $result = $updater->check_for_updates();
+
         if ( is_wp_error( $result ) ) {
-            wp_send_json_error( array(
-                'message' => $result->get_error_message(),
-            ) );
+            wp_send_json_error( array( 'message' => $result->get_error_message() ) );
         }
 
         wp_send_json_success( $result );
     }
 
     /**
-     * AJAX: Update theme or plugin.
+     * Update a single asset.
      */
-    public function ajax_update_theme() {
-        $this->verify_ajax_request();
+    public function ajax_update_asset() {
+        $this->verify_ajax();
 
-        $asset_type = $this->get_request_asset_type();
+        $asset_id = sanitize_text_field( wp_unslash( $_POST['asset_id'] ?? '' ) );
+        $updater  = $this->get_updater( $asset_id );
 
-        if ( 'plugin' === $asset_type ) {
-            $result = $this->plugin_updater->update( WP_Puller_Logger::SOURCE_MANUAL );
-        } else {
-            $result = $this->updater->update( WP_Puller_Logger::SOURCE_MANUAL );
+        if ( is_wp_error( $updater ) ) {
+            wp_send_json_error( array( 'message' => $updater->get_error_message() ) );
         }
+
+        $result = $updater->update( 'manual' );
 
         if ( is_wp_error( $result ) ) {
-            wp_send_json_error( array(
-                'message' => $result->get_error_message(),
-            ) );
+            wp_send_json_error( array( 'message' => $result->get_error_message() ) );
         }
 
-        $status = ( 'plugin' === $asset_type )
-            ? $this->plugin_updater->get_status()
-            : $this->updater->get_status();
+        $status = $updater->get_status();
+        $info   = $updater->get_current_info();
 
-        $response = array(
-            'message' => ( 'plugin' === $asset_type )
-                ? __( 'Plugin updated successfully!', 'wp-puller' )
-                : __( 'Theme updated successfully!', 'wp-puller' ),
+        wp_send_json_success( array(
+            'message' => __( 'Updated successfully.', 'wp-puller' ),
             'status'  => $status,
-        );
-
-        if ( 'plugin' === $asset_type ) {
-            $response['plugin_info'] = $this->plugin_updater->get_current_plugin_info();
-        } else {
-            $response['theme_info'] = $this->updater->get_current_theme_info();
-        }
-
-        wp_send_json_success( $response );
-    }
-
-    /**
-     * AJAX: Restore backup.
-     */
-    public function ajax_restore_backup() {
-        $this->verify_ajax_request();
-
-        $backup_name = isset( $_POST['backup_name'] ) ? sanitize_file_name( wp_unslash( $_POST['backup_name'] ) ) : '';
-
-        if ( empty( $backup_name ) ) {
-            wp_send_json_error( array(
-                'message' => __( 'Invalid backup name.', 'wp-puller' ),
-            ) );
-        }
-
-        $result = $this->backup->restore_backup( $backup_name );
-
-        if ( is_wp_error( $result ) ) {
-            wp_send_json_error( array(
-                'message' => $result->get_error_message(),
-            ) );
-        }
-
-        $this->logger->log_restore_success( $backup_name );
-
-        wp_send_json_success( array(
-            'message' => __( 'Backup restored successfully!', 'wp-puller' ),
+            'info'    => $info,
         ) );
     }
 
     /**
-     * AJAX: Delete backup.
+     * Check all assets for updates.
      */
-    public function ajax_delete_backup() {
-        $this->verify_ajax_request();
+    public function ajax_check_all() {
+        $this->verify_ajax();
 
-        $backup_name = isset( $_POST['backup_name'] ) ? sanitize_file_name( wp_unslash( $_POST['backup_name'] ) ) : '';
+        $assets  = WP_Puller::get_assets();
+        $results = array();
 
-        if ( empty( $backup_name ) ) {
-            wp_send_json_error( array(
-                'message' => __( 'Invalid backup name.', 'wp-puller' ),
-            ) );
+        foreach ( $assets as $id => $config ) {
+            if ( empty( $config['repo_url'] ) || empty( $config['slug'] ) ) {
+                continue;
+            }
+
+            $updater = $this->get_updater( $id );
+            if ( is_wp_error( $updater ) ) {
+                $results[ $id ] = array( 'error' => $updater->get_error_message() );
+                continue;
+            }
+
+            $check = $updater->check_for_updates();
+            if ( is_wp_error( $check ) ) {
+                $results[ $id ] = array( 'error' => $check->get_error_message() );
+            } else {
+                $results[ $id ] = $check;
+            }
         }
 
-        $result = $this->backup->delete_backup( $backup_name );
+        wp_send_json_success( array( 'results' => $results ) );
+    }
 
-        if ( is_wp_error( $result ) ) {
-            wp_send_json_error( array(
-                'message' => $result->get_error_message(),
-            ) );
+    /**
+     * Update all assets.
+     */
+    public function ajax_update_all() {
+        $this->verify_ajax();
+
+        $assets  = WP_Puller::get_assets();
+        $results = array();
+
+        foreach ( $assets as $id => $config ) {
+            if ( empty( $config['repo_url'] ) || empty( $config['slug'] ) ) {
+                continue;
+            }
+
+            $updater = $this->get_updater( $id );
+            if ( is_wp_error( $updater ) ) {
+                $results[ $id ] = array( 'error' => $updater->get_error_message() );
+                continue;
+            }
+
+            $result = $updater->update( 'manual' );
+            if ( is_wp_error( $result ) ) {
+                $results[ $id ] = array( 'error' => $result->get_error_message() );
+            } else {
+                $results[ $id ] = array(
+                    'success' => true,
+                    'info'    => $updater->get_current_info(),
+                    'status'  => $updater->get_status(),
+                );
+            }
         }
 
-        wp_send_json_success( array(
-            'message' => __( 'Backup deleted successfully!', 'wp-puller' ),
-        ) );
+        wp_send_json_success( array( 'results' => $results ) );
     }
 
-    /**
-     * AJAX: Regenerate webhook secret.
-     */
-    public function ajax_regenerate_secret() {
-        $this->verify_ajax_request();
-
-        $new_secret = WP_Puller_Webhook_Handler::generate_secret();
-        update_option( 'wp_puller_webhook_secret', $new_secret );
-
-        $this->logger->log(
-            __( 'Webhook secret regenerated', 'wp-puller' ),
-            WP_Puller_Logger::STATUS_INFO,
-            WP_Puller_Logger::SOURCE_MANUAL
-        );
-
-        wp_send_json_success( array(
-            'message' => __( 'Secret regenerated. Update it in GitHub.', 'wp-puller' ),
-            'secret'  => $new_secret,
-        ) );
-    }
+    // =========================================================================
+    // AJAX: Branch Testing
+    // =========================================================================
 
     /**
-     * AJAX: Clear logs.
-     */
-    public function ajax_clear_logs() {
-        $this->verify_ajax_request();
-
-        $this->logger->clear_logs();
-
-        wp_send_json_success( array(
-            'message' => __( 'Logs cleared.', 'wp-puller' ),
-        ) );
-    }
-
-
-    /**
-     * AJAX: Deploy a specific branch for testing.
+     * Deploy a branch for an asset.
      */
     public function ajax_deploy_branch() {
-        $this->verify_ajax_request();
+        $this->verify_ajax();
 
-        $branch = isset( $_POST['branch'] ) ? sanitize_text_field( wp_unslash( $_POST['branch'] ) ) : '';
+        $asset_id = sanitize_text_field( wp_unslash( $_POST['asset_id'] ?? '' ) );
+        $branch   = sanitize_text_field( wp_unslash( $_POST['branch'] ?? '' ) );
 
-        if ( empty( $branch ) ) {
-            wp_send_json_error( array(
-                'message' => __( 'No branch specified.', 'wp-puller' ),
-            ) );
+        $updater = $this->get_updater( $asset_id );
+        if ( is_wp_error( $updater ) ) {
+            wp_send_json_error( array( 'message' => $updater->get_error_message() ) );
         }
 
-        $asset_type = $this->get_request_asset_type();
-
-        if ( 'plugin' === $asset_type ) {
-            $result = $this->plugin_updater->deploy_branch( $branch );
-        } else {
-            $result = $this->updater->deploy_branch( $branch );
-        }
+        $result = $updater->deploy_branch( $branch );
 
         if ( is_wp_error( $result ) ) {
-            wp_send_json_error( array(
-                'message' => $result->get_error_message(),
-            ) );
+            wp_send_json_error( array( 'message' => $result->get_error_message() ) );
         }
 
-        $status = ( 'plugin' === $asset_type )
-            ? $this->plugin_updater->get_status()
-            : $this->updater->get_status();
-
-        $response = array(
-            'message'         => sprintf(
+        wp_send_json_success( array(
+            'message' => sprintf(
                 /* translators: %s: branch name */
-                __( 'Branch "%s" deployed successfully!', 'wp-puller' ),
+                __( 'Branch "%s" deployed successfully.', 'wp-puller' ),
                 $branch
             ),
-            'status'          => $status,
-            'deployed_branch' => $branch,
-        );
-
-        if ( 'plugin' === $asset_type ) {
-            $response['plugin_info'] = $this->plugin_updater->get_current_plugin_info();
-        } else {
-            $response['theme_info'] = $this->updater->get_current_theme_info();
-        }
-
-        wp_send_json_success( $response );
+            'status' => $updater->get_status(),
+            'info'   => $updater->get_current_info(),
+        ) );
     }
 
     /**
-     * AJAX: Get the 10 most recent branches with commit info.
+     * Get branches with info for an asset.
      */
     public function ajax_get_branches_with_info() {
-        $this->verify_ajax_request();
+        $this->verify_ajax();
 
-        $asset_type = $this->get_request_asset_type();
+        $asset_id = sanitize_text_field( wp_unslash( $_POST['asset_id'] ?? '' ) );
+        $assets   = WP_Puller::get_assets();
 
-        if ( 'plugin' === $asset_type ) {
-            $repo_url = get_option( 'wp_puller_plugin_repo_url', '' );
-            $configured_branch = get_option( 'wp_puller_plugin_branch', 'main' );
-            $deployed_branch   = get_option( 'wp_puller_plugin_deployed_branch', '' );
-            $current_commit    = get_option( 'wp_puller_plugin_latest_commit', '' );
-        } else {
-            $repo_url = get_option( 'wp_puller_repo_url', '' );
-            $configured_branch = get_option( 'wp_puller_branch', 'main' );
-            $deployed_branch   = get_option( 'wp_puller_deployed_branch', '' );
-            $current_commit    = get_option( 'wp_puller_latest_commit', '' );
+        if ( ! isset( $assets[ $asset_id ] ) ) {
+            wp_send_json_error( array( 'message' => __( 'Asset not found.', 'wp-puller' ) ) );
         }
 
-        if ( empty( $repo_url ) ) {
-            wp_send_json_error( array(
-                'message' => __( 'No repository configured.', 'wp-puller' ),
-            ) );
-        }
-
-        $parsed = $this->github_api->parse_repo_url( $repo_url );
+        $config     = $assets[ $asset_id ];
+        $github_api = WP_Puller::create_github_api( $config );
+        $parsed     = $github_api->parse_repo_url( $config['repo_url'] );
 
         if ( ! $parsed ) {
-            wp_send_json_error( array(
-                'message' => __( 'Invalid repository URL.', 'wp-puller' ),
-            ) );
+            wp_send_json_error( array( 'message' => __( 'Invalid repository URL.', 'wp-puller' ) ) );
         }
 
-        $this->github_api->clear_cache();
-
-        $branches = $this->github_api->get_branches_with_info( $parsed['owner'], $parsed['repo'], 10 );
+        $branches = $github_api->get_branches_with_info(
+            $parsed['owner'],
+            $parsed['repo'],
+            20,
+            $config['branch'],
+            $config['deployed_branch']
+        );
 
         if ( is_wp_error( $branches ) ) {
-            wp_send_json_error( array(
-                'message' => $branches->get_error_message(),
-            ) );
+            wp_send_json_error( array( 'message' => $branches->get_error_message() ) );
         }
 
         wp_send_json_success( array(
             'branches'        => $branches,
-            'configured'      => $configured_branch,
-            'deployed_branch' => $deployed_branch,
-            'current_commit'  => $current_commit,
+            'configured'      => $config['branch'],
+            'deployed_branch' => $config['deployed_branch'],
         ) );
     }
 
     /**
-     * AJAX: Compare two branches.
+     * Compare branches for an asset.
      */
     public function ajax_compare_branches() {
-        $this->verify_ajax_request();
+        $this->verify_ajax();
 
-        $base = isset( $_POST['base'] ) ? sanitize_text_field( wp_unslash( $_POST['base'] ) ) : '';
-        $head = isset( $_POST['head'] ) ? sanitize_text_field( wp_unslash( $_POST['head'] ) ) : '';
+        $asset_id = sanitize_text_field( wp_unslash( $_POST['asset_id'] ?? '' ) );
+        $base     = sanitize_text_field( wp_unslash( $_POST['base'] ?? '' ) );
+        $head     = sanitize_text_field( wp_unslash( $_POST['head'] ?? '' ) );
 
-        if ( empty( $base ) || empty( $head ) ) {
-            wp_send_json_error( array(
-                'message' => __( 'Both base and head branches are required.', 'wp-puller' ),
-            ) );
+        $assets = WP_Puller::get_assets();
+
+        if ( ! isset( $assets[ $asset_id ] ) ) {
+            wp_send_json_error( array( 'message' => __( 'Asset not found.', 'wp-puller' ) ) );
         }
 
-        $asset_type = $this->get_request_asset_type();
-
-        if ( 'plugin' === $asset_type ) {
-            $repo_url = get_option( 'wp_puller_plugin_repo_url', '' );
-        } else {
-            $repo_url = get_option( 'wp_puller_repo_url', '' );
-        }
-
-        $parsed = $this->github_api->parse_repo_url( $repo_url );
+        $config     = $assets[ $asset_id ];
+        $github_api = WP_Puller::create_github_api( $config );
+        $parsed     = $github_api->parse_repo_url( $config['repo_url'] );
 
         if ( ! $parsed ) {
-            wp_send_json_error( array(
-                'message' => __( 'Invalid repository URL.', 'wp-puller' ),
-            ) );
+            wp_send_json_error( array( 'message' => __( 'Invalid repository URL.', 'wp-puller' ) ) );
         }
 
-        $comparison = $this->github_api->compare_commits(
-            $parsed['owner'],
-            $parsed['repo'],
-            $base,
-            $head
-        );
+        $comparison = $github_api->compare_commits( $parsed['owner'], $parsed['repo'], $base, $head );
 
         if ( is_wp_error( $comparison ) ) {
-            wp_send_json_error( array(
-                'message' => $comparison->get_error_message(),
-            ) );
+            wp_send_json_error( array( 'message' => $comparison->get_error_message() ) );
         }
 
         wp_send_json_success( $comparison );
     }
 
     /**
+     * Set the updates branch for an asset.
+     */
+    public function ajax_set_updates_branch() {
+        $this->verify_ajax();
+
+        $asset_id = sanitize_text_field( wp_unslash( $_POST['asset_id'] ?? '' ) );
+        $branch   = sanitize_text_field( wp_unslash( $_POST['branch'] ?? '' ) );
+
+        $assets = WP_Puller::get_assets();
+
+        if ( ! isset( $assets[ $asset_id ] ) ) {
+            wp_send_json_error( array( 'message' => __( 'Asset not found.', 'wp-puller' ) ) );
+        }
+
+        if ( empty( $branch ) ) {
+            wp_send_json_error( array( 'message' => __( 'No branch specified.', 'wp-puller' ) ) );
+        }
+
+        $assets[ $asset_id ]['branch'] = $branch;
+        update_option( 'wp_puller_assets', $assets );
+
+        wp_send_json_success( array(
+            'message' => sprintf(
+                /* translators: %s: branch name */
+                __( 'Updates branch set to "%s".', 'wp-puller' ),
+                $branch
+            ),
+            'branch' => $branch,
+        ) );
+    }
+
+    // =========================================================================
+    // AJAX: Backups
+    // =========================================================================
+
+    /**
+     * Restore a backup.
+     */
+    public function ajax_restore_backup() {
+        $this->verify_ajax();
+
+        $asset_id    = sanitize_text_field( wp_unslash( $_POST['asset_id'] ?? '' ) );
+        $backup_name = sanitize_text_field( wp_unslash( $_POST['backup_name'] ?? '' ) );
+        $assets      = WP_Puller::get_assets();
+
+        if ( ! isset( $assets[ $asset_id ] ) ) {
+            wp_send_json_error( array( 'message' => __( 'Asset not found.', 'wp-puller' ) ) );
+        }
+
+        $config = $assets[ $asset_id ];
+
+        if ( 'plugin' === $config['type'] ) {
+            $result = $this->backup->restore_plugin_backup( $backup_name, $config['slug'] );
+        } else {
+            $result = $this->backup->restore_backup( $backup_name, $config['slug'] );
+        }
+
+        if ( is_wp_error( $result ) ) {
+            wp_send_json_error( array( 'message' => $result->get_error_message() ) );
+        }
+
+        $this->logger->log_restore_success( $backup_name, array(
+            'asset_type'  => $config['type'],
+            'asset_slug'  => $config['slug'],
+            'asset_label' => ! empty( $config['label'] ) ? $config['label'] : $config['slug'],
+        ) );
+
+        wp_send_json_success( array( 'message' => __( 'Backup restored successfully.', 'wp-puller' ) ) );
+    }
+
+    /**
+     * Delete a backup.
+     */
+    public function ajax_delete_backup() {
+        $this->verify_ajax();
+
+        $backup_name = sanitize_text_field( wp_unslash( $_POST['backup_name'] ?? '' ) );
+
+        $result = $this->backup->delete_backup( $backup_name );
+
+        if ( is_wp_error( $result ) ) {
+            wp_send_json_error( array( 'message' => $result->get_error_message() ) );
+        }
+
+        wp_send_json_success( array( 'message' => __( 'Backup deleted.', 'wp-puller' ) ) );
+    }
+
+    // =========================================================================
+    // AJAX: Shared
+    // =========================================================================
+
+    /**
+     * Test GitHub connection.
+     */
+    public function ajax_test_connection() {
+        $this->verify_ajax();
+
+        $repo_url = esc_url_raw( wp_unslash( $_POST['repo_url'] ?? '' ) );
+        $pat      = wp_unslash( $_POST['pat'] ?? '' );
+
+        $actual_pat = '';
+        if ( ! empty( $pat ) && ! $this->is_masked_value( $pat ) ) {
+            $actual_pat = $pat;
+        } elseif ( ! empty( $_POST['token_id'] ) ) {
+            $tokens = WP_Puller::get_tokens();
+            $tid    = sanitize_text_field( wp_unslash( $_POST['token_id'] ) );
+            if ( isset( $tokens[ $tid ] ) ) {
+                $actual_pat = WP_Puller::decrypt( $tokens[ $tid ]['encrypted'] );
+            }
+        }
+
+        $github_api = new WP_Puller_GitHub_API( $actual_pat );
+        $result     = $github_api->test_connection( $repo_url );
+
+        if ( is_wp_error( $result ) ) {
+            wp_send_json_error( array( 'message' => $result->get_error_message() ) );
+        }
+
+        wp_send_json_success( array(
+            'message' => __( 'Connection successful!', 'wp-puller' ),
+            'repo'    => $result,
+        ) );
+    }
+
+    /**
+     * Regenerate webhook secret.
+     */
+    public function ajax_regenerate_secret() {
+        $this->verify_ajax();
+
+        $secret = WP_Puller_Webhook_Handler::generate_secret();
+        update_option( 'wp_puller_webhook_secret', $secret );
+
+        wp_send_json_success( array(
+            'secret'  => $secret,
+            'message' => __( 'Secret regenerated.', 'wp-puller' ),
+        ) );
+    }
+
+    /**
+     * Clear activity logs.
+     */
+    public function ajax_clear_logs() {
+        $this->verify_ajax();
+
+        $this->logger->clear_logs();
+        wp_send_json_success();
+    }
+
+    // =========================================================================
+    // Helpers
+    // =========================================================================
+
+    /**
+     * Get an updater for a given asset ID.
+     *
+     * @param string $asset_id Asset ID.
+     * @return WP_Puller_Asset_Updater|WP_Error
+     */
+    private function get_updater( $asset_id ) {
+        return WP_Puller::create_updater( $asset_id );
+    }
+
+    /**
      * Verify AJAX request.
      */
-    private function verify_ajax_request() {
-        if ( ! check_ajax_referer( 'wp_puller_nonce', 'nonce', false ) ) {
-            wp_send_json_error( array(
-                'message' => __( 'Security check failed.', 'wp-puller' ),
-            ) );
-        }
+    private function verify_ajax() {
+        check_ajax_referer( 'wp_puller_nonce', 'nonce' );
 
         if ( ! current_user_can( 'manage_options' ) ) {
-            wp_send_json_error( array(
-                'message' => __( 'You do not have permission to perform this action.', 'wp-puller' ),
-            ) );
+            wp_send_json_error( array( 'message' => __( 'Permission denied.', 'wp-puller' ) ) );
         }
     }
 
     /**
-     * Get masked PAT for display.
+     * Check if a value is a masked PAT.
      *
+     * @param string $value Value to check.
+     * @return bool
+     */
+    private function is_masked_value( $value ) {
+        return false !== strpos( $value, '****' );
+    }
+
+    /**
+     * Generate a label for a PAT based on its format.
+     *
+     * @param string $pat Plain-text PAT.
      * @return string
      */
-    public static function get_masked_pat() {
-        $encrypted = get_option( 'wp_puller_pat', '' );
-
-        if ( empty( $encrypted ) ) {
-            return '';
+    private function generate_token_label( $pat ) {
+        $len = strlen( $pat );
+        if ( strpos( $pat, 'github_pat_' ) === 0 ) {
+            return sprintf( 'fine-grained, %d chars', $len );
         }
-
-        $decrypted = WP_Puller::decrypt( $encrypted );
-
-        if ( empty( $decrypted ) ) {
-            return '';
+        if ( strpos( $pat, 'ghp_' ) === 0 ) {
+            return sprintf( 'classic, %d chars', $len );
         }
-
-        return str_repeat( '*', min( strlen( $decrypted ), 20 ) ) . substr( $decrypted, -4 );
+        return sprintf( 'token, %d chars', $len );
     }
 
     /**
-     * Get PAT status for debugging.
+     * Get masked token value for display.
      *
+     * @param string $token_id Token ID.
+     * @return string
+     */
+    public static function get_masked_token( $token_id ) {
+        $tokens = WP_Puller::get_tokens();
+
+        if ( ! isset( $tokens[ $token_id ] ) ) {
+            return '';
+        }
+
+        $pat = WP_Puller::decrypt( $tokens[ $token_id ]['encrypted'] );
+
+        if ( empty( $pat ) ) {
+            return '';
+        }
+
+        $len = strlen( $pat );
+        if ( $len <= 8 ) {
+            return str_repeat( '*', $len );
+        }
+
+        return substr( $pat, 0, 4 ) . str_repeat( '*', $len - 8 ) . substr( $pat, -4 );
+    }
+
+    /**
+     * Get token status for display.
+     *
+     * @param string $token_id Token ID.
      * @return array
      */
-    public static function get_pat_status() {
-        $encrypted = get_option( 'wp_puller_pat', '' );
+    public static function get_token_status( $token_id ) {
+        $tokens = WP_Puller::get_tokens();
 
-        if ( empty( $encrypted ) ) {
+        if ( ! isset( $tokens[ $token_id ] ) ) {
             return array(
-                'stored'    => false,
-                'decrypts'  => false,
-                'type'      => 'none',
-                'message'   => 'No token saved',
+                'stored'   => false,
+                'decrypts' => false,
+                'message'  => '',
             );
         }
 
-        $decrypted = WP_Puller::decrypt( $encrypted );
-
-        if ( empty( $decrypted ) ) {
-            return array(
-                'stored'    => true,
-                'decrypts'  => false,
-                'type'      => 'unknown',
-                'message'   => 'Token stored but decryption failed',
-            );
-        }
-
-        $type = 'classic';
-        if ( strpos( $decrypted, 'github_pat_' ) === 0 ) {
-            $type = 'fine-grained';
-        } elseif ( strpos( $decrypted, 'ghp_' ) === 0 ) {
-            $type = 'classic';
-        }
+        $pat = WP_Puller::decrypt( $tokens[ $token_id ]['encrypted'] );
 
         return array(
-            'stored'    => true,
-            'decrypts'  => true,
-            'type'      => $type,
-            'length'    => strlen( $decrypted ),
-            'prefix'    => substr( $decrypted, 0, 10 ) . '...',
-            'message'   => sprintf( 'Token OK (%s, %d chars)', $type, strlen( $decrypted ) ),
+            'stored'   => true,
+            'decrypts' => ! empty( $pat ),
+            'message'  => ! empty( $pat )
+                ? sprintf( 'OK (%s)', $tokens[ $token_id ]['label'] )
+                : __( 'Decryption failed', 'wp-puller' ),
         );
     }
 }

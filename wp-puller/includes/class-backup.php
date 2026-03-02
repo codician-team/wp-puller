@@ -68,33 +68,28 @@ class WP_Puller_Backup {
     }
 
     /**
-     * Create a backup of the current active theme.
+     * Create a backup of a WordPress theme by slug.
      *
-     * @return string|WP_Error Backup directory path on success, WP_Error on failure.
+     * @param string $theme_slug Theme directory name.
+     * @param int    $max_backups Optional. Maximum backups to keep. 0 = use global setting.
+     * @return string|false|WP_Error Backup path on success, false if theme doesn't exist, WP_Error on failure.
      */
-    public function create_backup() {
+    public function create_theme_backup( $theme_slug, $max_backups = 0 ) {
+        $theme_dir = WP_CONTENT_DIR . '/themes/' . $theme_slug;
+
+        if ( ! is_dir( $theme_dir ) ) {
+            return false;
+        }
+
         $result = $this->ensure_backup_dir();
 
         if ( is_wp_error( $result ) ) {
             return $result;
         }
 
-        $theme      = wp_get_theme();
-        $theme_dir  = $theme->get_stylesheet_directory();
-        $theme_slug = $theme->get_stylesheet();
-
-        if ( ! is_dir( $theme_dir ) ) {
-            return new WP_Error(
-                'theme_not_found',
-                __( 'Active theme directory not found.', 'wp-puller' )
-            );
-        }
-
         $timestamp   = gmdate( 'Y-m-d_H-i-s' );
         $backup_name = $theme_slug . '_' . $timestamp;
         $backup_path = $this->get_backup_dir() . '/' . $backup_name;
-
-        global $wp_filesystem;
 
         if ( ! $this->recursive_copy( $theme_dir, $backup_path ) ) {
             return new WP_Error(
@@ -103,18 +98,31 @@ class WP_Puller_Backup {
             );
         }
 
-        $this->cleanup_old_backups( $theme_slug );
+        $this->cleanup_old_backups( $theme_slug, $max_backups );
 
         return $backup_path;
+    }
+
+    /**
+     * Create a backup of the current active theme (legacy wrapper).
+     *
+     * @return string|WP_Error Backup directory path on success, WP_Error on failure.
+     */
+    public function create_backup() {
+        $theme      = wp_get_theme();
+        $theme_slug = $theme->get_stylesheet();
+
+        return $this->create_theme_backup( $theme_slug );
     }
 
     /**
      * Create a backup of a WordPress plugin.
      *
      * @param string $plugin_slug Plugin directory name.
+     * @param int    $max_backups Optional. Maximum backups to keep. 0 = use global setting.
      * @return string|false|WP_Error Backup path on success, false if plugin doesn't exist, WP_Error on failure.
      */
-    public function create_plugin_backup( $plugin_slug ) {
+    public function create_plugin_backup( $plugin_slug, $max_backups = 0 ) {
         $plugin_dir = WP_PLUGIN_DIR . '/' . $plugin_slug;
 
         if ( ! is_dir( $plugin_dir ) ) {
@@ -138,7 +146,7 @@ class WP_Puller_Backup {
             );
         }
 
-        $this->cleanup_old_backups( 'plugin_' . $plugin_slug );
+        $this->cleanup_old_backups( 'plugin_' . $plugin_slug, $max_backups );
 
         return $backup_path;
     }
@@ -182,12 +190,13 @@ class WP_Puller_Backup {
     }
 
     /**
-     * Restore theme from a backup.
+     * Restore a theme from a backup.
      *
      * @param string $backup_name Backup directory name.
+     * @param string $theme_slug  Optional. Theme slug to restore to. Defaults to active theme.
      * @return bool|WP_Error True on success, WP_Error on failure.
      */
-    public function restore_backup( $backup_name ) {
+    public function restore_backup( $backup_name, $theme_slug = '' ) {
         $backup_path = $this->get_backup_dir() . '/' . sanitize_file_name( $backup_name );
 
         if ( ! is_dir( $backup_path ) ) {
@@ -197,14 +206,20 @@ class WP_Puller_Backup {
             );
         }
 
-        $theme     = wp_get_theme();
-        $theme_dir = $theme->get_stylesheet_directory();
+        if ( ! empty( $theme_slug ) ) {
+            $theme_dir = WP_CONTENT_DIR . '/themes/' . $theme_slug;
+        } else {
+            $theme     = wp_get_theme();
+            $theme_dir = $theme->get_stylesheet_directory();
+        }
 
-        if ( ! $this->recursive_delete( $theme_dir ) ) {
-            return new WP_Error(
-                'delete_failed',
-                __( 'Failed to remove current theme files.', 'wp-puller' )
-            );
+        if ( is_dir( $theme_dir ) ) {
+            if ( ! $this->recursive_delete( $theme_dir ) ) {
+                return new WP_Error(
+                    'delete_failed',
+                    __( 'Failed to remove current theme files.', 'wp-puller' )
+                );
+            }
         }
 
         if ( ! $this->recursive_copy( $backup_path, $theme_dir ) ) {
@@ -291,11 +306,14 @@ class WP_Puller_Backup {
     /**
      * Cleanup old backups, keeping only the most recent ones.
      *
-     * @param string $theme_slug Theme slug.
+     * @param string $theme_slug  Theme or plugin slug prefix.
+     * @param int    $max_backups Optional. Max to keep. 0 = use global setting.
      */
-    private function cleanup_old_backups( $theme_slug ) {
-        $max_backups = absint( get_option( 'wp_puller_backup_count', 3 ) );
-        $backups     = $this->get_backups( $theme_slug );
+    private function cleanup_old_backups( $theme_slug, $max_backups = 0 ) {
+        if ( $max_backups <= 0 ) {
+            $max_backups = absint( get_option( 'wp_puller_backup_count', 3 ) );
+        }
+        $backups = $this->get_backups( $theme_slug );
 
         if ( count( $backups ) <= $max_backups ) {
             return;
@@ -431,6 +449,67 @@ class WP_Puller_Backup {
         }
 
         return $size;
+    }
+
+    /**
+     * Detect the version of a theme or plugin from a backup directory.
+     *
+     * @param string $backup_path Full path to the backup directory.
+     * @param string $type        'theme' or 'plugin'.
+     * @return string Version string or empty string if not found.
+     */
+    public function get_backup_version( $backup_path, $type = 'theme' ) {
+        if ( ! is_dir( $backup_path ) ) {
+            return '';
+        }
+
+        if ( 'theme' === $type ) {
+            $style = $backup_path . '/style.css';
+            if ( file_exists( $style ) ) {
+                return $this->extract_header_version( $style, 'Version' );
+            }
+            return '';
+        }
+
+        // Plugin: scan top-level PHP files for the "Plugin Name:" header.
+        $files = glob( $backup_path . '/*.php' );
+        if ( ! $files ) {
+            return '';
+        }
+
+        foreach ( $files as $file ) {
+            $version = $this->extract_header_version( $file, 'Version' );
+            if ( '' !== $version ) {
+                // Verify it's actually a plugin file by also checking for Plugin Name.
+                $content = file_get_contents( $file, false, null, 0, 8192 );
+                if ( false !== stripos( $content, 'Plugin Name' ) ) {
+                    return $version;
+                }
+            }
+        }
+
+        return '';
+    }
+
+    /**
+     * Extract a specific header value from a file.
+     *
+     * @param string $file   File path.
+     * @param string $header Header name (e.g. 'Version').
+     * @return string Header value or empty string.
+     */
+    private function extract_header_version( $file, $header ) {
+        $content = file_get_contents( $file, false, null, 0, 8192 );
+        if ( false === $content ) {
+            return '';
+        }
+
+        $pattern = '/^[\s*]*' . preg_quote( $header, '/' ) . '\s*:\s*(.+)$/mi';
+        if ( preg_match( $pattern, $content, $matches ) ) {
+            return trim( $matches[1] );
+        }
+
+        return '';
     }
 
     /**
