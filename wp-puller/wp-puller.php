@@ -2,8 +2,8 @@
 /**
  * Plugin Name: WP Puller
  * Plugin URI: https://github.com/developer/wp-puller
- * Description: Automatically update your WordPress theme from GitHub. Supports public and private repositories with webhook-based real-time updates.
- * Version: 1.0.7
+ * Description: Automatically update your WordPress themes and plugins from GitHub. Supports public and private repositories with webhook-based real-time updates.
+ * Version: 2.3.0
  * Requires at least: 5.0
  * Requires PHP: 7.4
  * Author: Developer
@@ -18,7 +18,7 @@ if ( ! defined( 'ABSPATH' ) ) {
     exit;
 }
 
-define( 'WP_PULLER_VERSION', '1.0.7' );
+define( 'WP_PULLER_VERSION', '2.3.0' );
 define( 'WP_PULLER_PLUGIN_FILE', __FILE__ );
 define( 'WP_PULLER_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'WP_PULLER_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
@@ -46,16 +46,12 @@ function wp_puller_activate() {
         update_option( 'wp_puller_webhook_secret', wp_generate_password( 32, false ) );
     }
 
-    if ( false === get_option( 'wp_puller_branch' ) ) {
-        update_option( 'wp_puller_branch', 'main' );
+    if ( false === get_option( 'wp_puller_assets' ) ) {
+        update_option( 'wp_puller_assets', array() );
     }
 
-    if ( false === get_option( 'wp_puller_auto_update' ) ) {
-        update_option( 'wp_puller_auto_update', true );
-    }
-
-    if ( false === get_option( 'wp_puller_backup_count' ) ) {
-        update_option( 'wp_puller_backup_count', 3 );
+    if ( false === get_option( 'wp_puller_tokens' ) ) {
+        update_option( 'wp_puller_tokens', array() );
     }
 
     flush_rewrite_rules();
