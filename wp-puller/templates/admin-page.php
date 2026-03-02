@@ -563,13 +563,9 @@ $backup_class = $data['backup_class'];
     <!-- ============ FOOTER ============ -->
     <div class="wp-puller-footer">
         <p>
-            <?php
-            printf(
-                /* translators: %s: GitHub link */
-                esc_html__( 'WP Puller is open source. %s', 'wp-puller' ),
-                '<a href="https://github.com/developer/wp-puller" target="_blank" rel="noopener">' . esc_html__( 'Star on GitHub', 'wp-puller' ) . '</a>'
-            );
-            ?>
+            <a href="https://github.com/techtherapy/wp-puller" target="_blank" rel="noopener">techtherapy/wp-puller</a>
+            <?php esc_html_e( 'is a fork of', 'wp-puller' ); ?>
+            <a href="https://github.com/codician-team/wp-puller" target="_blank" rel="noopener">codician-team/wp-puller</a>
         </p>
     </div>
 </div>
