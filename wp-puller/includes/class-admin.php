@@ -75,12 +75,14 @@ class WP_Puller_Admin {
      * Add admin menu page.
      */
     public function add_admin_menu() {
-        add_management_page(
+        add_menu_page(
             __( 'WP Puller', 'wp-puller' ),
             __( 'WP Puller', 'wp-puller' ),
             'manage_options',
             'wp-puller',
-            array( $this, 'render_admin_page' )
+            array( $this, 'render_admin_page' ),
+            'dashicons-update',
+            81
         );
     }
 
@@ -90,7 +92,7 @@ class WP_Puller_Admin {
      * @param string $hook Current admin page hook.
      */
     public function enqueue_scripts( $hook ) {
-        if ( 'tools_page_wp-puller' !== $hook ) {
+        if ( 'toplevel_page_wp-puller' !== $hook ) {
             return;
         }
 

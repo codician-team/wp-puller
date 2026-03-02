@@ -238,6 +238,29 @@
     color: #646970;
 }
 
+.wp-puller-repo-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 12px;
+    color: #2271b1;
+    text-decoration: none;
+    margin-top: 4px;
+    word-break: break-all;
+}
+
+.wp-puller-repo-link:hover {
+    color: #135e96;
+    text-decoration: underline;
+}
+
+.wp-puller-repo-link .dashicons {
+    font-size: 14px;
+    width: 14px;
+    height: 14px;
+    flex-shrink: 0;
+}
+
 /* ==========================================================================
    Asset Meta (Commit & Last Check)
    ========================================================================== */
@@ -295,8 +318,16 @@
 .wp-puller-card-actions {
     display: flex;
     flex-direction: row;
+    flex-wrap: wrap;
     gap: 8px;
     margin-top: 12px;
+}
+
+.wp-puller-card-actions .button {
+    flex: 1 1 auto;
+    min-width: 0;
+    white-space: nowrap;
+    text-align: center;
 }
 
 /* ==========================================================================
