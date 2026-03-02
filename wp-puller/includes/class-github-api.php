@@ -525,50 +525,77 @@ class WP_Puller_GitHub_API {
      * @param int    $limit Maximum number of branches to return.
      * @return array|WP_Error Array of branch data with commit info.
      */
-    public function get_branches_with_info( $owner, $repo, $limit = 10 ) {
-        $cache_key = self::CACHE_PREFIX . 'branches_info_' . md5( $owner . $repo . $limit );
+    public function get_branches_with_info( $owner, $repo, $limit = 10, $configured = '', $deployed = '' ) {
+        $cache_key = self::CACHE_PREFIX . 'branches_info_' . md5( $owner . $repo . $limit . $configured . $deployed );
         $cached    = get_transient( $cache_key );
 
         if ( false !== $cached ) {
             return $cached;
         }
 
-        // Try GraphQL first (single API call, returns branches with commit dates)
-        $branches = $this->get_branches_graphql( $owner, $repo, $limit );
+        // Try GraphQL first — paginates through ALL branches (100 per page).
+        $branches = $this->get_branches_graphql( $owner, $repo );
 
-        // Fall back to REST API if GraphQL fails (e.g. no PAT for public repo)
+        // Fall back to REST API if GraphQL fails (e.g. no PAT for public repo).
         if ( is_wp_error( $branches ) ) {
-            $branches = $this->get_branches_rest( $owner, $repo, $limit );
+            $branches = $this->get_branches_rest( $owner, $repo );
         }
 
         if ( is_wp_error( $branches ) ) {
             return $branches;
         }
 
-        set_transient( $cache_key, $branches, self::CACHE_DURATION * 2 );
+        // Sort ALL branches by commit date descending.
+        usort( $branches, function ( $a, $b ) {
+            return ( $b['timestamp'] ?: 0 ) - ( $a['timestamp'] ?: 0 );
+        } );
 
-        return $branches;
+        // Take the top $limit most recent branches.
+        $result       = array_slice( $branches, 0, $limit );
+        $result_names = wp_list_pluck( $result, 'name' );
+
+        // Ensure configured and deployed branches always appear in the result.
+        $pinned = array_unique( array_filter( array( $configured, $deployed ) ) );
+
+        foreach ( $pinned as $pin_name ) {
+            if ( in_array( $pin_name, $result_names, true ) ) {
+                continue;
+            }
+            foreach ( $branches as $b ) {
+                if ( $b['name'] === $pin_name ) {
+                    $result[] = $b;
+                    break;
+                }
+            }
+        }
+
+        set_transient( $cache_key, $result, self::CACHE_DURATION * 2 );
+
+        return $result;
     }
 
     /**
-     * Fetch branches with commit info via GraphQL (single API call).
+     * Fetch ALL branches with commit info via GraphQL (paginated, 100 per page).
+     *
+     * TAG_COMMIT_DATE ordering only works for refs/tags/, not refs/heads/,
+     * so we fetch all branches alphabetically and sort by committedDate in PHP.
      *
      * @param string $owner Repository owner.
      * @param string $repo  Repository name.
-     * @param int    $limit Maximum number of branches to return.
      * @return array|WP_Error
      */
-    private function get_branches_graphql( $owner, $repo, $limit ) {
+    private function get_branches_graphql( $owner, $repo ) {
         $query = '
-            query($owner: String!, $repo: String!, $count: Int!) {
+            query($owner: String!, $repo: String!, $count: Int!, $cursor: String) {
                 repository(owner: $owner, name: $repo) {
-                    refs(refPrefix: "refs/heads/", first: $count, orderBy: {field: TAG_COMMIT_DATE, direction: DESC}) {
+                    refs(refPrefix: "refs/heads/", first: $count, after: $cursor, orderBy: {field: ALPHABETICAL, direction: ASC}) {
                         nodes {
                             name
                             target {
                                 ... on Commit {
                                     oid
                                     messageHeadline
+                                    committedDate
                                     author {
                                         name
                                         date
@@ -576,94 +603,144 @@ class WP_Puller_GitHub_API {
                                 }
                             }
                         }
+                        pageInfo {
+                            hasNextPage
+                            endCursor
+                        }
                     }
                 }
             }
         ';
 
-        $result = $this->graphql_request( $query, array(
-            'owner' => $owner,
-            'repo'  => $repo,
-            'count' => $limit,
-        ) );
+        $branches   = array();
+        $cursor     = null;
+        $max_pages  = 10; // Safety limit: 10 pages × 100 = 1000 branches max.
+        $page_count = 0;
 
-        if ( is_wp_error( $result ) ) {
-            return $result;
-        }
-
-        $nodes = isset( $result['data']['repository']['refs']['nodes'] )
-            ? $result['data']['repository']['refs']['nodes']
-            : null;
-
-        if ( ! is_array( $nodes ) ) {
-            return new WP_Error( 'graphql_parse', 'Unexpected GraphQL response structure.' );
-        }
-
-        $branches = array();
-        foreach ( $nodes as $node ) {
-            $target = isset( $node['target'] ) ? $node['target'] : array();
-            $sha    = isset( $target['oid'] ) ? $target['oid'] : '';
-            $date   = isset( $target['author']['date'] ) ? $target['author']['date'] : '';
-
-            $branches[] = array(
-                'name'      => $node['name'],
-                'sha'       => $sha,
-                'short_sha' => $sha ? substr( $sha, 0, 7 ) : '',
-                'message'   => isset( $target['messageHeadline'] ) ? substr( $target['messageHeadline'], 0, 80 ) : '',
-                'author'    => isset( $target['author']['name'] ) ? $target['author']['name'] : '',
-                'date'      => $date,
-                'timestamp' => ! empty( $date ) ? strtotime( $date ) : 0,
+        do {
+            $variables = array(
+                'owner' => $owner,
+                'repo'  => $repo,
+                'count' => 100,
             );
-        }
+            if ( null !== $cursor ) {
+                $variables['cursor'] = $cursor;
+            }
+
+            $result = $this->graphql_request( $query, $variables );
+
+            if ( is_wp_error( $result ) ) {
+                // If we already collected some branches, return what we have.
+                if ( ! empty( $branches ) ) {
+                    break;
+                }
+                return $result;
+            }
+
+            $refs = isset( $result['data']['repository']['refs'] )
+                ? $result['data']['repository']['refs']
+                : null;
+
+            if ( ! is_array( $refs ) || ! isset( $refs['nodes'] ) ) {
+                if ( ! empty( $branches ) ) {
+                    break;
+                }
+                return new WP_Error( 'graphql_parse', 'Unexpected GraphQL response structure.' );
+            }
+
+            foreach ( $refs['nodes'] as $node ) {
+                $target = isset( $node['target'] ) ? $node['target'] : array();
+                $sha    = isset( $target['oid'] ) ? $target['oid'] : '';
+                // Prefer committedDate, fall back to author.date.
+                $date   = isset( $target['committedDate'] ) ? $target['committedDate'] : '';
+                if ( empty( $date ) && isset( $target['author']['date'] ) ) {
+                    $date = $target['author']['date'];
+                }
+
+                $branches[] = array(
+                    'name'      => $node['name'],
+                    'sha'       => $sha,
+                    'short_sha' => $sha ? substr( $sha, 0, 7 ) : '',
+                    'message'   => isset( $target['messageHeadline'] ) ? substr( $target['messageHeadline'], 0, 80 ) : '',
+                    'author'    => isset( $target['author']['name'] ) ? $target['author']['name'] : '',
+                    'date'      => $date,
+                    'timestamp' => ! empty( $date ) ? strtotime( $date ) : 0,
+                );
+            }
+
+            $has_next = ! empty( $refs['pageInfo']['hasNextPage'] );
+            $cursor   = isset( $refs['pageInfo']['endCursor'] ) ? $refs['pageInfo']['endCursor'] : null;
+            $page_count++;
+
+        } while ( $has_next && $page_count < $max_pages );
 
         return $branches;
     }
 
     /**
-     * Fetch branches with commit info via REST API (N+1 calls, fallback).
+     * Fetch ALL branches with commit info via REST API (fallback).
+     *
+     * Paginates through all branches (100 per page), then fetches commit
+     * details for each to get dates. For repos with very many branches,
+     * caps commit-detail lookups at 200 to stay within rate limits.
      *
      * @param string $owner Repository owner.
      * @param string $repo  Repository name.
-     * @param int    $limit Maximum number of branches to return.
      * @return array|WP_Error
      */
-    private function get_branches_rest( $owner, $repo, $limit ) {
-        $fetch_count = min( $limit * 3, 100 );
-        $response    = $this->api_request( "/repos/{$owner}/{$repo}/branches?per_page={$fetch_count}" );
+    private function get_branches_rest( $owner, $repo ) {
+        // Paginate to get ALL branch names + SHAs.
+        $all_branches = array();
+        $page         = 1;
+        $max_pages    = 5; // 5 pages × 100 = 500 branches max.
 
-        if ( is_wp_error( $response ) ) {
-            return $response;
-        }
-
-        $branches = array();
-        foreach ( $response as $branch ) {
-            $sha  = isset( $branch['commit']['sha'] ) ? $branch['commit']['sha'] : '';
-            $data = array(
-                'name'      => $branch['name'],
-                'sha'       => $sha,
-                'short_sha' => $sha ? substr( $sha, 0, 7 ) : '',
-                'message'   => '',
-                'author'    => '',
-                'date'      => '',
-                'timestamp' => 0,
+        do {
+            $response = $this->api_request(
+                "/repos/{$owner}/{$repo}/branches?per_page=100&page={$page}"
             );
 
-            $commit = $this->get_latest_commit( $owner, $repo, $branch['name'] );
-            if ( ! is_wp_error( $commit ) ) {
-                $data['message']   = isset( $commit['message'] ) ? substr( $commit['message'], 0, 80 ) : '';
-                $data['author']    = isset( $commit['author'] ) ? $commit['author'] : '';
-                $data['date']      = isset( $commit['date'] ) ? $commit['date'] : '';
-                $data['timestamp'] = ! empty( $commit['date'] ) ? strtotime( $commit['date'] ) : 0;
+            if ( is_wp_error( $response ) ) {
+                if ( ! empty( $all_branches ) ) {
+                    break;
+                }
+                return $response;
             }
 
-            $branches[] = $data;
+            if ( empty( $response ) || ! is_array( $response ) ) {
+                break;
+            }
+
+            foreach ( $response as $branch ) {
+                $sha = isset( $branch['commit']['sha'] ) ? $branch['commit']['sha'] : '';
+                $all_branches[] = array(
+                    'name'      => $branch['name'],
+                    'sha'       => $sha,
+                    'short_sha' => $sha ? substr( $sha, 0, 7 ) : '',
+                    'message'   => '',
+                    'author'    => '',
+                    'date'      => '',
+                    'timestamp' => 0,
+                );
+            }
+
+            $page++;
+        } while ( count( $response ) === 100 && $page <= $max_pages );
+
+        // Fetch commit details for each branch to get dates.
+        // Cap at 200 to stay within reasonable API usage.
+        $lookup_count = min( count( $all_branches ), 200 );
+
+        for ( $i = 0; $i < $lookup_count; $i++ ) {
+            $commit = $this->get_latest_commit( $owner, $repo, $all_branches[ $i ]['name'] );
+            if ( ! is_wp_error( $commit ) ) {
+                $all_branches[ $i ]['message']   = isset( $commit['message'] ) ? substr( $commit['message'], 0, 80 ) : '';
+                $all_branches[ $i ]['author']    = isset( $commit['author'] ) ? $commit['author'] : '';
+                $all_branches[ $i ]['date']      = isset( $commit['date'] ) ? $commit['date'] : '';
+                $all_branches[ $i ]['timestamp'] = ! empty( $commit['date'] ) ? strtotime( $commit['date'] ) : 0;
+            }
         }
 
-        usort( $branches, function( $a, $b ) {
-            return $b['timestamp'] - $a['timestamp'];
-        } );
-
-        return array_slice( $branches, 0, $limit );
+        return $all_branches;
     }
 
     /**

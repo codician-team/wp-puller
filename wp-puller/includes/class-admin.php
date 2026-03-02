@@ -544,7 +544,13 @@ class WP_Puller_Admin {
             wp_send_json_error( array( 'message' => __( 'Invalid repository URL.', 'wp-puller' ) ) );
         }
 
-        $branches = $github_api->get_branches_with_info( $parsed['owner'], $parsed['repo'] );
+        $branches = $github_api->get_branches_with_info(
+            $parsed['owner'],
+            $parsed['repo'],
+            20,
+            $config['branch'],
+            $config['deployed_branch']
+        );
 
         if ( is_wp_error( $branches ) ) {
             wp_send_json_error( array( 'message' => $branches->get_error_message() ) );

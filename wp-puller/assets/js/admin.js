@@ -202,9 +202,6 @@
             case 'backups':
                 populateBackupsPanel(assetId, asset, $panel);
                 break;
-            case 'webhook':
-                // Webhook panel just shows the global URL/secret, no extra population needed
-                break;
         }
 
         // Slide down
@@ -723,7 +720,10 @@
                 return;
             }
 
-            // Close any open panel first, then open the new one
+            // Close the global webhook panel if open
+            $('#wp-puller-panel-webhook').stop(true, true).slideUp(200);
+
+            // Close any open per-asset panel first, then open the new one
             closePanel(function() {
                 openPanel(panelName, assetId);
             });
@@ -732,6 +732,28 @@
         $(document).on('click', '.wp-puller-close-panel', function(e) {
             e.preventDefault();
             closePanel();
+        });
+
+        // -----------------------------------------------------------------
+        // Webhook panel toggle (global, not per-asset)
+        // -----------------------------------------------------------------
+
+        $(document).on('click', '#wp-puller-toggle-webhook', function(e) {
+            e.preventDefault();
+            var $panel = $('#wp-puller-panel-webhook');
+            if ($panel.is(':visible')) {
+                $panel.stop(true, true).slideUp(200);
+            } else {
+                // Close any open per-asset panel first
+                closePanel(function() {
+                    $panel.stop(true, true).slideDown(250);
+                });
+            }
+        });
+
+        $(document).on('click', '#wp-puller-close-webhook', function(e) {
+            e.preventDefault();
+            $('#wp-puller-panel-webhook').stop(true, true).slideUp(200);
         });
 
         // -----------------------------------------------------------------

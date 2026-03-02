@@ -36,6 +36,10 @@ $backup_class = $data['backup_class'];
                 <span class="dashicons dashicons-download"></span>
                 <?php esc_html_e( 'Update All', 'wp-puller' ); ?>
             </button>
+            <button type="button" class="button" id="wp-puller-toggle-webhook">
+                <span class="dashicons dashicons-admin-links"></span>
+                <?php esc_html_e( 'Webhook', 'wp-puller' ); ?>
+            </button>
         </div>
     </div>
 
@@ -147,9 +151,6 @@ $backup_class = $data['backup_class'];
                             <?php if ( ! empty( $backups ) ) : ?>
                                 <span class="wp-puller-icon-badge"><?php echo count( $backups ); ?></span>
                             <?php endif; ?>
-                        </button>
-                        <button type="button" class="wp-puller-icon-btn wp-puller-open-panel" data-panel="webhook" data-asset-id="<?php echo esc_attr( $asset_id ); ?>" title="<?php esc_attr_e( 'Webhook', 'wp-puller' ); ?>">
-                            <span class="dashicons dashicons-admin-links"></span>
                         </button>
                     </div>
                 </div>
@@ -415,22 +416,21 @@ $backup_class = $data['backup_class'];
         </div>
     </div>
 
-    <!-- ============ WEBHOOK PANEL (per-asset) ============ -->
-    <div class="wp-puller-panel wp-puller-panel-webhook" id="wp-puller-panel-webhook" data-asset-id="" style="display: none;">
+    <!-- ============ WEBHOOK PANEL (global) ============ -->
+    <div class="wp-puller-panel wp-puller-panel-webhook" id="wp-puller-panel-webhook" style="display: none;">
         <div class="wp-puller-card wp-puller-card-full">
             <div class="wp-puller-card-header">
                 <h2>
                     <span class="dashicons dashicons-admin-links"></span>
                     <?php esc_html_e( 'Webhook Setup', 'wp-puller' ); ?>
-                    <span class="wp-puller-panel-asset-label"></span>
                 </h2>
-                <button type="button" class="button button-small wp-puller-close-panel" title="<?php esc_attr_e( 'Close', 'wp-puller' ); ?>">
+                <button type="button" class="button button-small" id="wp-puller-close-webhook" title="<?php esc_attr_e( 'Close', 'wp-puller' ); ?>">
                     <span class="dashicons dashicons-no-alt"></span>
                 </button>
             </div>
             <div class="wp-puller-card-body">
                 <p class="description" style="margin: 0 0 12px;">
-                    <?php esc_html_e( 'Configure a GitHub webhook for this repository to receive instant updates on push.', 'wp-puller' ); ?>
+                    <?php esc_html_e( 'Configure a GitHub webhook to receive instant updates when you push. This applies to all configured repositories.', 'wp-puller' ); ?>
                 </p>
 
                 <div class="wp-puller-webhook-field">
