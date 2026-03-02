@@ -387,10 +387,48 @@
         var $result = $card.find('.wp-puller-update-result');
         var html = '';
 
+        /**
+         * Format an ISO 8601 date string to a readable local date/time.
+         */
+        function formatCommitTime(dateStr) {
+            if (!dateStr) {
+                return '';
+            }
+            var d = new Date(dateStr);
+            if (isNaN(d.getTime())) {
+                return escapeHtml(dateStr);
+            }
+            return escapeHtml(d.toLocaleString());
+        }
+
+        /**
+         * Build a commit info line with SHA, message, and time.
+         */
+        function commitInfo(commitData, label) {
+            var line = '';
+            if (!commitData) {
+                return line;
+            }
+            var sha = typeof commitData === 'object' ? commitData.short_sha : String(commitData).substring(0, 7);
+            line += label + ': <code>' + escapeHtml(sha) + '</code>';
+            if (typeof commitData === 'object') {
+                if (commitData.message) {
+                    line += ' &mdash; ' + escapeHtml(commitData.message.substring(0, 60));
+                }
+                if (commitData.date) {
+                    line += '<br><small>Committed: ' + formatCommitTime(commitData.date) + '</small>';
+                }
+            }
+            return line;
+        }
+
         if (data.is_new_setup) {
             html = '<p><strong>Ready to install.</strong> Click "Update Now" to pull from GitHub.</p>';
             if (data.latest_version) {
                 html += '<p>Version in repository: <strong>' + escapeHtml(data.latest_version) + '</strong></p>';
+            }
+            if (data.latest_commit) {
+                html += '<p>' + commitInfo(data.latest_commit, 'Latest') + '</p>';
             }
             $result.removeClass('has-update no-update').addClass('has-update');
         } else if (data.update_available || data.has_update) {
@@ -401,27 +439,29 @@
             if (data.current_version || data.latest_version) {
                 html += '<p>';
                 if (data.current_version) {
-                    html += 'Installed: <strong>' + escapeHtml(data.current_version) + '</strong>';
+                    html += 'Installed: <strong>v' + escapeHtml(data.current_version) + '</strong>';
                 }
                 if (data.current_version && data.latest_version) {
                     html += ' &rarr; ';
                 }
                 if (data.latest_version) {
-                    html += 'New: <strong>' + escapeHtml(data.latest_version) + '</strong>';
+                    html += 'Available: <strong>v' + escapeHtml(data.latest_version) + '</strong>';
                 }
                 html += '</p>';
             }
-            if (data.current_commit) {
-                html += '<p>Current: <code>' + escapeHtml(String(data.current_commit).substring(0, 7)) + '</code>';
-            }
-            if (data.latest_commit) {
-                var latestSha = typeof data.latest_commit === 'object' ? data.latest_commit.short_sha : String(data.latest_commit).substring(0, 7);
-                html += ' &rarr; Latest: <code>' + escapeHtml(latestSha) + '</code>';
-                if (typeof data.latest_commit === 'object' && data.latest_commit.message) {
-                    html += ' - ' + escapeHtml(data.latest_commit.message.substring(0, 60));
+            if (data.current_commit || data.latest_commit) {
+                html += '<p>';
+                if (data.current_commit) {
+                    html += 'Current: <code>' + escapeHtml(String(data.current_commit).substring(0, 7)) + '</code>';
                 }
+                if (data.current_commit && data.latest_commit) {
+                    html += ' &rarr; ';
+                }
+                if (data.latest_commit) {
+                    html += commitInfo(data.latest_commit, 'Latest');
+                }
+                html += '</p>';
             }
-            html += '</p>';
             $result.removeClass('has-update no-update').addClass('has-update');
         } else {
             html = '<p><strong>Up to date.</strong></p>';
@@ -429,12 +469,10 @@
                 html += '<p>' + escapeHtml(data.message) + '</p>';
             }
             if (data.current_version) {
-                html += '<p>Version: <strong>' + escapeHtml(data.current_version) + '</strong>';
-                if (data.latest_commit) {
-                    var sha = typeof data.latest_commit === 'object' ? data.latest_commit.short_sha : String(data.latest_commit).substring(0, 7);
-                    html += ' (commit: <code>' + escapeHtml(sha) + '</code>)';
-                }
-                html += '</p>';
+                html += '<p>Version: <strong>v' + escapeHtml(data.current_version) + '</strong></p>';
+            }
+            if (data.latest_commit) {
+                html += '<p>' + commitInfo(data.latest_commit, 'Commit') + '</p>';
             }
             $result.removeClass('has-update no-update').addClass('no-update');
         }

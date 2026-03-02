@@ -88,6 +88,12 @@ $backup_class = $data['backup_class'];
                             printf( esc_html__( 'v%s', 'wp-puller' ), esc_html( $display_version ) );
                             ?>
                         </span>
+                        <?php if ( ! empty( $config['repo_url'] ) ) : ?>
+                            <a href="<?php echo esc_url( $config['repo_url'] ); ?>" class="wp-puller-repo-link" target="_blank" rel="noopener">
+                                <span class="dashicons dashicons-github"></span>
+                                <?php echo esc_html( preg_replace( '#^https?://(www\.)?github\.com/#', '', $config['repo_url'] ) ); ?>
+                            </a>
+                        <?php endif; ?>
 
                         <div class="wp-puller-asset-meta">
                             <div class="wp-puller-meta-item">
