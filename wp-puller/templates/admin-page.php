@@ -312,7 +312,7 @@ $pat_status   = WP_Puller_Admin::get_pat_status();
             printf(
                 /* translators: %s: GitHub link */
                 esc_html__( 'WP Puller is open source. %s', 'wp-puller' ),
-                '<a href="https://github.com/developer/wp-puller" target="_blank" rel="noopener">' . esc_html__( 'Star on GitHub', 'wp-puller' ) . '</a>'
+                '<a href="https://github.com/codician-team/wp-puller" target="_blank" rel="noopener">' . esc_html__( 'Star on GitHub', 'wp-puller' ) . '</a>'
             );
             ?>
         </p>
