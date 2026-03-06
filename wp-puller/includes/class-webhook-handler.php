@@ -85,6 +85,18 @@ class WP_Puller_Webhook_Handler {
      * @return WP_REST_Response
      */
     public function handle_webhook( $request ) {
+        if ( ! $this->check_rate_limit() ) {
+            $response = new WP_REST_Response(
+                array(
+                    'success' => false,
+                    'message' => 'Too many requests.',
+                ),
+                429
+            );
+            $response->header( 'Retry-After', '60' );
+            return $response;
+        }
+
         $signature = $request->get_header( 'X-Hub-Signature-256' );
         $event     = $request->get_header( 'X-GitHub-Event' );
         $delivery  = $request->get_header( 'X-GitHub-Delivery' );
@@ -99,16 +111,6 @@ class WP_Puller_Webhook_Handler {
             WP_Puller_Logger::STATUS_INFO,
             WP_Puller_Logger::SOURCE_WEBHOOK
         );
-
-        if ( 'ping' === $event ) {
-            return new WP_REST_Response(
-                array(
-                    'success' => true,
-                    'message' => 'Pong! Webhook is configured correctly.',
-                ),
-                200
-            );
-        }
 
         if ( empty( $signature ) ) {
             $this->logger->log(
@@ -141,6 +143,16 @@ class WP_Puller_Webhook_Handler {
                     'message' => 'Invalid signature.',
                 ),
                 401
+            );
+        }
+
+        if ( 'ping' === $event ) {
+            return new WP_REST_Response(
+                array(
+                    'success' => true,
+                    'message' => 'Pong! Webhook is configured correctly.',
+                ),
+                200
             );
         }
 
@@ -256,6 +268,33 @@ class WP_Puller_Webhook_Handler {
             ),
             200
         );
+    }
+
+    /**
+     * Check whether the current request is within the rate limit.
+     *
+     * Allows a maximum of 10 requests per minute per IP address.
+     *
+     * @return bool True if within limit, false if exceeded.
+     */
+    private function check_rate_limit() {
+        $ip = isset( $_SERVER['REMOTE_ADDR'] ) ? sanitize_text_field( wp_unslash( $_SERVER['REMOTE_ADDR'] ) ) : '';
+
+        if ( empty( $ip ) ) {
+            return true;
+        }
+
+        $transient_key = 'wp_puller_rl_' . md5( $ip );
+        $count         = (int) get_transient( $transient_key );
+
+        if ( $count >= 10 ) {
+            return false;
+        }
+
+        // Increment counter; start a fresh 60-second window on first request.
+        set_transient( $transient_key, $count + 1, 60 );
+
+        return true;
     }
 
     /**

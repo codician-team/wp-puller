@@ -56,6 +56,51 @@ class WP_Puller_Theme_Updater {
      * @return bool|WP_Error True on success, WP_Error on failure.
      */
     public function update( $source = 'manual' ) {
+        // Prevent concurrent updates from corrupting the theme directory.
+        if ( ! $this->acquire_update_lock() ) {
+            $error = new WP_Error(
+                'update_locked',
+                __( 'An update is already in progress. Please try again shortly.', 'wp-puller' )
+            );
+            $this->logger->log_update_error( $error->get_error_message(), $source );
+            return $error;
+        }
+
+        $result = $this->do_update( $source );
+
+        $this->release_update_lock();
+
+        return $result;
+    }
+
+    /**
+     * Acquire the update lock.
+     *
+     * @return bool True if the lock was acquired, false if already locked.
+     */
+    private function acquire_update_lock() {
+        if ( get_transient( 'wp_puller_update_lock' ) ) {
+            return false;
+        }
+        // 5-minute TTL as a safety net in case the process dies unexpectedly.
+        set_transient( 'wp_puller_update_lock', 1, 5 * MINUTE_IN_SECONDS );
+        return true;
+    }
+
+    /**
+     * Release the update lock.
+     */
+    private function release_update_lock() {
+        delete_transient( 'wp_puller_update_lock' );
+    }
+
+    /**
+     * Internal update implementation, called only when the lock is held.
+     *
+     * @param string $source Update source.
+     * @return bool|WP_Error
+     */
+    private function do_update( $source ) {
         $repo_url = get_option( 'wp_puller_repo_url', '' );
         $branch   = get_option( 'wp_puller_branch', 'main' );
 
@@ -104,7 +149,7 @@ class WP_Puller_Theme_Updater {
 
         $result = $this->install_theme( $zip_file, $parsed['repo'], $branch );
 
-        @unlink( $zip_file );
+        unlink( $zip_file );
 
         if ( is_wp_error( $result ) ) {
             $this->logger->log_update_error( $result->get_error_message(), $source );

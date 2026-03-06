@@ -218,17 +218,17 @@ class WP_Puller_GitHub_API {
         }
 
         $tmp_file = wp_tempnam( 'wp-puller-' );
-        $response = wp_remote_get( $url, $args );
+        $response = wp_safe_remote_get( $url, $args );
 
         if ( is_wp_error( $response ) ) {
-            @unlink( $tmp_file );
+            unlink( $tmp_file );
             return $response;
         }
 
         $status_code = wp_remote_retrieve_response_code( $response );
 
         if ( 200 !== $status_code ) {
-            @unlink( $tmp_file );
+            unlink( $tmp_file );
 
             if ( 404 === $status_code ) {
                 return new WP_Error(
@@ -263,7 +263,7 @@ class WP_Puller_GitHub_API {
         }
 
         if ( ! $wp_filesystem->put_contents( $tmp_file, $body ) ) {
-            @unlink( $tmp_file );
+            unlink( $tmp_file );
             return new WP_Error(
                 'write_failed',
                 __( 'Failed to save downloaded file.', 'wp-puller' )
@@ -323,7 +323,7 @@ class WP_Puller_GitHub_API {
         // Debug logging
         if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
             error_log( 'WP Puller API Request: ' . $url );
-            error_log( 'WP Puller Auth Header: ' . ( ! empty( $auth_header ) ? substr( $auth_header, 0, 20 ) . '...' : 'none' ) );
+            error_log( 'WP Puller Auth Header: ' . ( ! empty( $auth_header ) ? 'present' : 'none' ) );
             error_log( 'WP Puller Response Code: ' . wp_remote_retrieve_response_code( $response ) );
         }
 
