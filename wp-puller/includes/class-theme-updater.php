@@ -153,6 +153,28 @@ class WP_Puller_Theme_Updater {
 
         if ( is_wp_error( $result ) ) {
             $this->logger->log_update_error( $result->get_error_message(), $source );
+
+            // Attempt to auto-restore the backup created before this update.
+            $restore = $this->backup->restore_backup( basename( $backup_path ) );
+
+            if ( is_wp_error( $restore ) ) {
+                $this->logger->log(
+                    sprintf(
+                        /* translators: %s: error message */
+                        __( 'Auto-restore failed after update error: %s', 'wp-puller' ),
+                        $restore->get_error_message()
+                    ),
+                    WP_Puller_Logger::STATUS_ERROR,
+                    WP_Puller_Logger::SOURCE_SYSTEM
+                );
+            } else {
+                $this->logger->log(
+                    __( 'Theme auto-restored from backup after failed update.', 'wp-puller' ),
+                    WP_Puller_Logger::STATUS_INFO,
+                    WP_Puller_Logger::SOURCE_SYSTEM
+                );
+            }
+
             return $result;
         }
 
@@ -264,6 +286,15 @@ class WP_Puller_Theme_Updater {
         // Handle theme in subdirectory
         $theme_path = get_option( 'wp_puller_theme_path', '' );
         if ( ! empty( $theme_path ) ) {
+            // Validate at use time as a second line of defense against path traversal.
+            if ( false !== strpos( $theme_path, '..' ) ) {
+                $wp_filesystem->delete( $temp_dir, true );
+                return new WP_Error(
+                    'invalid_path',
+                    __( 'Invalid theme path.', 'wp-puller' )
+                );
+            }
+
             $extracted_dir = $extracted_dir . '/' . $theme_path;
 
             if ( ! is_dir( $extracted_dir ) ) {
