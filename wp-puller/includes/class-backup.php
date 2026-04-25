@@ -372,7 +372,7 @@ class WP_Puller_Backup {
             return $bytes . ' B';
         }
 
-        $units = array( 'KB', 'MB', 'GB' );
+        $units = array( 'B', 'KB', 'MB', 'GB' );
         $bytes = (float) $bytes;
 
         for ( $i = 0; $bytes >= 1024 && $i < count( $units ) - 1; $i++ ) {
