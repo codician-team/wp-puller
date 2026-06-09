@@ -4,7 +4,7 @@ Auto-update WordPress themes from GitHub. Free and open source.
 
 [![WordPress 5.0+](https://img.shields.io/badge/WordPress-5.0%2B-0073aa.svg)](https://wordpress.org/)
 [![PHP 7.4+](https://img.shields.io/badge/PHP-7.4%2B-777bb4.svg)](https://php.net/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![License: GPLv2%2B](https://img.shields.io/badge/License-GPLv2%2B-blue.svg)](LICENSE)
 
 ---
 
@@ -117,7 +117,7 @@ The theme needs a valid `style.css` with a `Theme Name` header.
 ## FAQ
 
 **Is this actually free?**
-Yes. MIT license, no premium tier, no feature gates.
+Yes. GPLv2-or-later license, no premium tier, no feature gates.
 
 **How does it compare to WP Pusher?**
 Same core idea—deploy WordPress themes from GitHub. WP Puller is free and open source. WP Pusher has more features (plugins, GitLab, Bitbucket) but costs money.
@@ -177,4 +177,4 @@ Issues and PRs welcome. Fork it, make changes, submit a PR.
 
 ## License
 
-MIT. Do whatever you want with it.
+GPLv2 or later.
