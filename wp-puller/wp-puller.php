@@ -1,7 +1,7 @@
 <?php
 /**
  * Plugin Name: WP Puller
- * Plugin URI: https://github.com/developer/wp-puller
+ * Plugin URI: https://github.com/codician-team/wp-puller
  * Description: Automatically update your WordPress theme from GitHub. Supports public and private repositories with webhook-based real-time updates.
  * Version: 1.0.7
  * Requires at least: 5.0
