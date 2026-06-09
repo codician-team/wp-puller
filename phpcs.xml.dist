@@ -1,0 +1,52 @@
+<?xml version="1.0"?>
+<ruleset name="WP Puller">
+    <description>Coding standards for the WP Puller plugin.</description>
+
+    <!-- What to scan. -->
+    <file>wp-puller</file>
+    <exclude-pattern>*/vendor/*</exclude-pattern>
+    <exclude-pattern>*/languages/*</exclude-pattern>
+
+    <!-- Only sniff PHP. -->
+    <arg name="extensions" value="php"/>
+
+    <!-- Show progress, use colors, show sniff codes in the report. -->
+    <arg value="ps"/>
+    <arg name="colors"/>
+
+    <!-- Run across as many cores as are available. -->
+    <arg name="parallel" value="8"/>
+
+    <!-- Minimum supported versions (kept in sync with the plugin header). -->
+    <config name="testVersion" value="7.4-"/>
+    <config name="minimum_wp_version" value="5.0"/>
+
+    <!-- WordPress Coding Standards. -->
+    <rule ref="WordPress">
+        <!-- The plugin ships pre-built assets; allow the existing file layout. -->
+        <exclude name="WordPress.Files.FileName.InvalidClassFileName"/>
+        <exclude name="WordPress.Files.FileName.NotHyphenatedLowercase"/>
+    </rule>
+
+    <!-- PHP cross-version compatibility, scoped to the supported WP range. -->
+    <rule ref="PHPCompatibilityWP"/>
+
+    <!-- Enforce the plugin's text domain on all i18n calls. -->
+    <rule ref="WordPress.WP.I18n">
+        <properties>
+            <property name="text_domain" type="array">
+                <element value="wp-puller"/>
+            </property>
+        </properties>
+    </rule>
+
+    <!-- Enforce the plugin's global prefixes. -->
+    <rule ref="WordPress.NamingConventions.PrefixAllGlobals">
+        <properties>
+            <property name="prefixes" type="array">
+                <element value="wp_puller"/>
+                <element value="WP_Puller"/>
+            </property>
+        </properties>
+    </rule>
+</ruleset>

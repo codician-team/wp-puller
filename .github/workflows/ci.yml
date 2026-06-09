@@ -1,0 +1,81 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # PHP syntax lint — a hard gate. Every supported PHP version must parse the
+  # plugin without errors before anything can be merged.
+  # ---------------------------------------------------------------------------
+  php-lint:
+    name: PHP Lint (php ${{ matrix.php }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        php: ['7.4', '8.0', '8.1', '8.2', '8.3']
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          coverage: none
+
+      - name: Lint all PHP files
+        run: |
+          find wp-puller -name '*.php' -print0 \
+            | xargs -0 -n1 -P4 php -d display_errors=1 -l
+
+  # ---------------------------------------------------------------------------
+  # WordPress Coding Standards (PHPCS + WPCS).
+  #
+  # ADVISORY for now: the legacy codebase has a large backlog of formatting
+  # violations (~97% auto-fixable with `composer run lint:fix`). This job
+  # surfaces that debt on every PR without blocking merges. Once the backlog is
+  # cleared in a dedicated cleanup PR, remove `continue-on-error` below to make
+  # WPCS a required gate. Tracking: see CONTRIBUTING.md ("Coding standards").
+  # ---------------------------------------------------------------------------
+  coding-standards:
+    name: WordPress Coding Standards (advisory)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          coverage: none
+          tools: composer
+
+      - name: Install dependencies
+        run: composer install --no-interaction --no-progress --prefer-dist
+
+      - name: Run PHPCS
+        id: phpcs
+        continue-on-error: true
+        run: |
+          ./vendor/bin/phpcs --report-full --report-summary --runtime-set ignore_warnings_on_exit 0
+
+      - name: Note advisory status
+        if: steps.phpcs.outcome == 'failure'
+        run: |
+          echo "::warning::WPCS reported violations. This check is advisory for now — see CONTRIBUTING.md. Run 'composer run lint:fix' locally to auto-fix most of them."
+          {
+            echo "### WordPress Coding Standards (advisory)"
+            echo ""
+            echo "WPCS reported violations. This check does **not** block merges yet."
+            echo "Run \`composer run lint:fix\` locally to auto-fix most of them."
+          } >> "$GITHUB_STEP_SUMMARY"
