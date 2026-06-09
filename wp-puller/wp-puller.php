@@ -6,10 +6,10 @@
  * Version: 1.0.8
  * Requires at least: 5.0
  * Requires PHP: 7.4
- * Author: Developer
- * Author URI: https://github.com/developer
- * License: MIT
- * License URI: https://opensource.org/licenses/MIT
+ * Author: Codician Team
+ * Author URI: https://github.com/codician-team
+ * License: GPLv2 or later
+ * License URI: https://www.gnu.org/licenses/gpl-2.0.html
  * Text Domain: wp-puller
  * Domain Path: /languages
  */
