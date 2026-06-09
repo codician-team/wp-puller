@@ -175,8 +175,15 @@ class WP_Puller_Admin {
         $auto_update = isset( $_POST['auto_update'] ) && 'true' === $_POST['auto_update'];
         $backup_count = isset( $_POST['backup_count'] ) ? absint( $_POST['backup_count'] ) : 3;
 
-        // Clean up theme path - remove leading/trailing slashes
+        // Clean up theme path - remove leading/trailing slashes.
         $theme_path = trim( $theme_path, '/' );
+
+        // Reject path traversal attempts.
+        if ( false !== strpos( $theme_path, '..' ) ) {
+            wp_send_json_error( array(
+                'message' => __( 'Invalid theme path.', 'wp-puller' ),
+            ) );
+        }
 
         update_option( 'wp_puller_repo_url', $repo_url );
         update_option( 'wp_puller_branch', $branch );
@@ -399,7 +406,7 @@ class WP_Puller_Admin {
             return '';
         }
 
-        return str_repeat( '*', min( strlen( $decrypted ), 20 ) ) . substr( $decrypted, -4 );
+        return str_repeat( '*', min( strlen( $decrypted ), 24 ) );
     }
 
     /**
@@ -442,7 +449,6 @@ class WP_Puller_Admin {
             'decrypts'  => true,
             'type'      => $type,
             'length'    => strlen( $decrypted ),
-            'prefix'    => substr( $decrypted, 0, 10 ) . '...',
             'message'   => sprintf( 'Token OK (%s, %d chars)', $type, strlen( $decrypted ) ),
         );
     }

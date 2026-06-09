@@ -185,6 +185,9 @@ final class WP_Puller {
     /**
      * Encrypt a value using WordPress salts.
      *
+     * Produces a v2 ciphertext: base64( iv[16] + cipher + hmac[32] ).
+     * The HMAC-SHA256 covers iv+cipher to prevent ciphertext tampering.
+     *
      * @param string $value Value to encrypt.
      * @return string
      */
@@ -201,11 +204,17 @@ final class WP_Puller {
             return '';
         }
 
-        return base64_encode( $iv . $cipher );
+        $payload = $iv . $cipher;
+        $hmac    = hash_hmac( 'sha256', $payload, $key, true );
+
+        return 'v2:' . base64_encode( $payload . $hmac );
     }
 
     /**
      * Decrypt a value using WordPress salts.
+     *
+     * Supports v2 format (with HMAC) and legacy v1 format (without HMAC)
+     * for backward compatibility with previously stored values.
      *
      * @param string $value Value to decrypt.
      * @return string
@@ -215,15 +224,38 @@ final class WP_Puller {
             return '';
         }
 
-        $key  = self::get_encryption_key();
-        $data = base64_decode( $value );
+        $key = self::get_encryption_key();
 
-        if ( false === $data || strlen( $data ) < 17 ) {
-            return '';
+        if ( strpos( $value, 'v2:' ) === 0 ) {
+            // v2 format: iv[16] + cipher[n] + hmac[32].
+            $data = base64_decode( substr( $value, 3 ) );
+
+            // Minimum: 16 (iv) + 1 (cipher) + 32 (hmac) = 49 bytes.
+            if ( false === $data || strlen( $data ) < 49 ) {
+                return '';
+            }
+
+            $hmac          = substr( $data, -32 );
+            $payload       = substr( $data, 0, -32 );
+            $expected_hmac = hash_hmac( 'sha256', $payload, $key, true );
+
+            if ( ! hash_equals( $expected_hmac, $hmac ) ) {
+                return '';
+            }
+
+            $iv     = substr( $payload, 0, 16 );
+            $cipher = substr( $payload, 16 );
+        } else {
+            // Legacy v1 format: iv[16] + cipher[n], no HMAC.
+            $data = base64_decode( $value );
+
+            if ( false === $data || strlen( $data ) < 17 ) {
+                return '';
+            }
+
+            $iv     = substr( $data, 0, 16 );
+            $cipher = substr( $data, 16 );
         }
-
-        $iv     = substr( $data, 0, 16 );
-        $cipher = substr( $data, 16 );
 
         $decrypted = openssl_decrypt( $cipher, 'AES-256-CBC', $key, OPENSSL_RAW_DATA, $iv );
 
@@ -236,7 +268,26 @@ final class WP_Puller {
      * @return string
      */
     private static function get_encryption_key() {
-        $salt = defined( 'AUTH_KEY' ) ? AUTH_KEY : 'wp-puller-default-key';
+        $salt = defined( 'AUTH_KEY' ) ? AUTH_KEY : self::get_or_create_fallback_key();
         return hash( 'sha256', $salt, true );
+    }
+
+    /**
+     * Get or create a site-specific fallback encryption key.
+     *
+     * Used only when AUTH_KEY is not defined (non-standard WP setups).
+     * The key is generated once and stored in the database.
+     *
+     * @return string
+     */
+    private static function get_or_create_fallback_key() {
+        $key = get_option( 'wp_puller_encryption_key', '' );
+
+        if ( empty( $key ) ) {
+            $key = wp_generate_password( 64, true, true );
+            update_option( 'wp_puller_encryption_key', $key, false );
+        }
+
+        return $key;
     }
 }

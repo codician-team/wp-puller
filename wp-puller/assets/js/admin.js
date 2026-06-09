@@ -347,20 +347,34 @@
             var $btn = $(e.currentTarget);
             var inputId = $btn.data('copy');
             var $input = $('#' + inputId);
+            var text = $input.val();
 
+            if ( navigator.clipboard && window.isSecureContext ) {
+                navigator.clipboard.writeText( text ).then(function() {
+                    WPPuller.setCopiedState( $btn );
+                }).catch(function() {
+                    WPPuller.copyFallback( $input, $btn );
+                });
+            } else {
+                WPPuller.copyFallback( $input, $btn );
+            }
+        },
+
+        copyFallback: function($input, $btn) {
             $input.select();
-
             try {
                 document.execCommand('copy');
-                $btn.find('.dashicons').removeClass('dashicons-clipboard').addClass('dashicons-yes');
-
-                setTimeout(function() {
-                    $btn.find('.dashicons').removeClass('dashicons-yes').addClass('dashicons-clipboard');
-                }, 1500);
+                WPPuller.setCopiedState( $btn );
             } catch (err) {
-                // Fallback for older browsers
                 window.prompt('Copy to clipboard:', $input.val());
             }
+        },
+
+        setCopiedState: function($btn) {
+            $btn.find('.dashicons').removeClass('dashicons-clipboard').addClass('dashicons-yes');
+            setTimeout(function() {
+                $btn.find('.dashicons').removeClass('dashicons-yes').addClass('dashicons-clipboard');
+            }, 1500);
         },
 
         setLoading: function($btn, loading) {

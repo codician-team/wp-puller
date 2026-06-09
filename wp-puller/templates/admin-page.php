@@ -212,7 +212,7 @@ $pat_status   = WP_Puller_Admin::get_pat_status();
                 <div class="wp-puller-webhook-field">
                     <label><?php esc_html_e( 'Secret', 'wp-puller' ); ?></label>
                     <div class="wp-puller-copy-field">
-                        <input type="text" readonly value="<?php echo esc_attr( $webhook_info['secret'] ); ?>" id="webhook-secret">
+                        <input type="password" readonly value="<?php echo esc_attr( $webhook_info['secret'] ); ?>" id="webhook-secret">
                         <button type="button" class="button wp-puller-copy-btn" data-copy="webhook-secret">
                             <span class="dashicons dashicons-clipboard"></span>
                         </button>

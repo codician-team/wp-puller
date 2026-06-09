@@ -16,7 +16,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 class WP_Puller_Backup {
 
     /**
-     * Backup directory name.
+     * Backup directory base name.
      *
      * @var string
      */
@@ -25,10 +25,20 @@ class WP_Puller_Backup {
     /**
      * Get the backup directory path.
      *
+     * The directory name includes a random suffix stored in the database so it
+     * is not guessable on servers (e.g. Nginx) where .htaccess has no effect.
+     *
      * @return string
      */
     public function get_backup_dir() {
-        return WP_CONTENT_DIR . '/' . self::BACKUP_DIR;
+        $suffix = get_option( 'wp_puller_backup_dir_suffix', '' );
+
+        if ( empty( $suffix ) ) {
+            $suffix = wp_generate_password( 16, false );
+            update_option( 'wp_puller_backup_dir_suffix', $suffix, false );
+        }
+
+        return WP_CONTENT_DIR . '/' . self::BACKUP_DIR . '-' . $suffix;
     }
 
     /**
