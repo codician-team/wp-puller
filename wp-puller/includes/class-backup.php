@@ -134,22 +134,56 @@ class WP_Puller_Backup {
             );
         }
 
+        global $wp_filesystem;
+        if ( ! $wp_filesystem ) {
+            require_once ABSPATH . 'wp-admin/includes/file.php';
+            WP_Filesystem();
+        }
+
         $theme     = wp_get_theme();
         $theme_dir = $theme->get_stylesheet_directory();
+        $parent    = dirname( $theme_dir );
+        $suffix    = wp_generate_password( 8, false );
 
-        if ( ! $this->recursive_delete( $theme_dir ) ) {
-            return new WP_Error(
-                'delete_failed',
-                __( 'Failed to remove current theme files.', 'wp-puller' )
-            );
-        }
+        // Staging/old dirs live next to the theme (same filesystem, so the
+        // swap below is a fast rename) and are dot-prefixed so WordPress's
+        // theme scanner ignores them while they briefly exist.
+        $staging = $parent . '/.wp-puller-restore-' . $suffix;
+        $old_dir = $parent . '/.wp-puller-old-' . $suffix;
 
-        if ( ! $this->recursive_copy( $backup_path, $theme_dir ) ) {
+        // 1. Build the restored copy in staging first. If anything fails here,
+        //    the live theme has not been touched.
+        if ( ! $this->recursive_copy( $backup_path, $staging ) ) {
+            $this->recursive_delete( $staging );
             return new WP_Error(
                 'restore_failed',
-                __( 'Failed to restore theme from backup.', 'wp-puller' )
+                __( 'Failed to stage backup for restore.', 'wp-puller' )
             );
         }
+
+        // 2. Move the current theme aside (kept for rollback).
+        if ( is_dir( $theme_dir ) && ! $wp_filesystem->move( $theme_dir, $old_dir ) ) {
+            $this->recursive_delete( $staging );
+            return new WP_Error(
+                'restore_failed',
+                __( 'Failed to set the current theme aside for restore.', 'wp-puller' )
+            );
+        }
+
+        // 3. Move staging into place. On failure, roll the original back.
+        if ( ! $wp_filesystem->move( $staging, $theme_dir ) ) {
+            if ( is_dir( $old_dir ) ) {
+                $wp_filesystem->move( $old_dir, $theme_dir );
+            }
+            $this->recursive_delete( $staging );
+            return new WP_Error(
+                'restore_failed',
+                __( 'Failed to activate the restored theme; the original was kept.', 'wp-puller' )
+            );
+        }
+
+        // 4. Success: discard the old copy.
+        $this->recursive_delete( $old_dir );
 
         return true;
     }

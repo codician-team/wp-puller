@@ -101,6 +101,7 @@ final class WP_Puller {
      */
     private function includes() {
         require_once WP_PULLER_PLUGIN_DIR . 'includes/class-logger.php';
+        require_once WP_PULLER_PLUGIN_DIR . 'includes/class-client-ip.php';
         require_once WP_PULLER_PLUGIN_DIR . 'includes/class-github-api.php';
         require_once WP_PULLER_PLUGIN_DIR . 'includes/class-backup.php';
         require_once WP_PULLER_PLUGIN_DIR . 'includes/class-theme-updater.php';

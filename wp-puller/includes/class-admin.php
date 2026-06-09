@@ -344,7 +344,7 @@ class WP_Puller_Admin {
         $this->verify_ajax_request();
 
         $new_secret = WP_Puller_Webhook_Handler::generate_secret();
-        update_option( 'wp_puller_webhook_secret', $new_secret );
+        WP_Puller_Webhook_Handler::store_secret( $new_secret );
 
         $this->logger->log(
             __( 'Webhook secret regenerated', 'wp-puller' ),
