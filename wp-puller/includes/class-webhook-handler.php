@@ -278,7 +278,10 @@ class WP_Puller_Webhook_Handler {
      * @return bool True if within limit, false if exceeded.
      */
     private function check_rate_limit() {
-        $ip = isset( $_SERVER['REMOTE_ADDR'] ) ? sanitize_text_field( wp_unslash( $_SERVER['REMOTE_ADDR'] ) ) : '';
+        // Resolve the real client IP behind trusted reverse proxies / CDNs
+        // (Cloudflare, Sucuri, a site's own nginx, etc.) so the limit tracks
+        // the actual caller rather than a shared proxy address.
+        $ip = WP_Puller_Client_IP::get();
 
         if ( empty( $ip ) ) {
             return true;
@@ -305,7 +308,7 @@ class WP_Puller_Webhook_Handler {
      * @return bool
      */
     private function verify_signature( $payload, $signature ) {
-        $secret = get_option( 'wp_puller_webhook_secret', '' );
+        $secret = self::get_secret();
 
         if ( empty( $secret ) ) {
             return false;
@@ -317,7 +320,7 @@ class WP_Puller_Webhook_Handler {
     }
 
     /**
-     * Generate a new webhook secret.
+     * Generate a new webhook secret (plaintext).
      *
      * @return string
      */
@@ -326,13 +329,61 @@ class WP_Puller_Webhook_Handler {
     }
 
     /**
+     * Get the plaintext webhook secret.
+     *
+     * The secret is stored encrypted at rest using WordPress salt-derived
+     * encryption (see WP_Puller::encrypt). Legacy installs stored it in
+     * plaintext; those are still read transparently for backward
+     * compatibility (and upgraded on the next save / admin page view).
+     *
+     * @return string
+     */
+    public static function get_secret() {
+        $stored = get_option( 'wp_puller_webhook_secret', '' );
+
+        if ( '' === $stored ) {
+            return '';
+        }
+
+        // Encrypted values carry the WP_Puller::encrypt() version prefix.
+        if ( 0 === strpos( $stored, 'v2:' ) ) {
+            return WP_Puller::decrypt( $stored );
+        }
+
+        // Legacy plaintext secret.
+        return $stored;
+    }
+
+    /**
+     * Store a webhook secret, encrypting it at rest.
+     *
+     * Falls back to plaintext only if encryption is unavailable, so the secret
+     * is never lost.
+     *
+     * @param string $plain Plaintext secret.
+     * @return void
+     */
+    public static function store_secret( $plain ) {
+        $encrypted = WP_Puller::encrypt( $plain );
+        update_option( 'wp_puller_webhook_secret', '' !== $encrypted ? $encrypted : $plain );
+    }
+
+    /**
      * Get webhook configuration instructions.
      *
      * @return array
      */
     public static function get_setup_instructions() {
-        $webhook_url    = self::get_webhook_url();
-        $webhook_secret = get_option( 'wp_puller_webhook_secret', '' );
+        $webhook_url = self::get_webhook_url();
+
+        // Upgrade a legacy plaintext secret to encrypted-at-rest the first
+        // time an admin views this page, then read it back decrypted.
+        $raw = get_option( 'wp_puller_webhook_secret', '' );
+        if ( '' !== $raw && 0 !== strpos( $raw, 'v2:' ) ) {
+            self::store_secret( $raw );
+        }
+
+        $webhook_secret = self::get_secret();
 
         return array(
             'url'          => $webhook_url,

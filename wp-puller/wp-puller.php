@@ -43,7 +43,8 @@ function wp_puller() {
  */
 function wp_puller_activate() {
     if ( ! get_option( 'wp_puller_webhook_secret' ) ) {
-        update_option( 'wp_puller_webhook_secret', wp_generate_password( 32, false ) );
+        // Stored encrypted at rest via WordPress salt-derived encryption.
+        update_option( 'wp_puller_webhook_secret', WP_Puller::encrypt( wp_generate_password( 32, false ) ) );
     }
 
     if ( false === get_option( 'wp_puller_branch' ) ) {
